@@ -5,6 +5,7 @@
   "openBrowser": true,
   "flowsDir": "",
   "teamsDir": "",
+  "shotsDir": "",
   "projectRoots": ["C:\\Users\\Shaf\\Downloads\\vibe-code-projs"],
   "defaultAgentCommand": "claude",
   "workflow": {

@@ -1,6 +1,7 @@
 // Thin transport: serves the UI and the live JSON endpoints. No business logic here.
 import http from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -14,6 +15,7 @@ import { validateFlow } from './src/flows.mjs';
 import { list, save, remove } from './src/store.mjs';
 import { isValidPaneId, isValidId } from './src/ids.mjs';
 import { listProjects } from './src/projects.mjs';
+import { readImage, IMAGE_LIMITS } from './src/image.mjs';
 import { startRun, listRuns, stopRun } from './src/runner.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
@@ -21,6 +23,8 @@ const config = JSON.parse(await readFile(path.join(root, 'config.json'), 'utf8')
 const herdrBin = resolveHerdrBin(config.herdrBin);
 const flowsDir = config.flowsDir || path.join(os.homedir(), '.claude', 'herdr-flows');
 const teamsDir = config.teamsDir || path.join(os.homedir(), '.claude', 'herdr-teams');
+// Where a pasted picture is kept so an agent can open it by path.
+const shotsDir = config.shotsDir || path.join(os.homedir(), '.claude', 'herdr-shots');
 const limits = {
   timeoutMs: config.workflow?.stepTimeoutMs ?? 900000,
   settleMs: config.workflow?.settleMs ?? 6000,
@@ -100,6 +104,25 @@ const server = http.createServer(async (req, res) => {
       else await runInPane(herdrBin, body.id, typeof body.text === 'string' ? body.text.slice(0, 4000) : '');
       return ok(res);
     } catch (e) { return fail(res, e.message || e); }
+  }
+
+  /* Keep an image so an agent can read it: {dataUrl} in, an absolute path out.
+     Agents read files, not clipboards, so a pasted picture has to become a real file first.
+     The bytes decide what it is, the name is the hash of those bytes, and the path never
+     comes from anything the page said — so nothing here can be steered into writing
+     somewhere else or serving something back that was not an image. */
+  if (url.pathname === '/api/pane/image' && post) {
+    const body = await jsonBody(req, IMAGE_LIMITS.bytes * 1.4);
+    if (!body) return fail(res, 'That image is too big to send.', 400);
+    const file = readImage(body.dataUrl);
+    if (!file.ok) return fail(res, file.error);
+    const name = `${createHash('sha1').update(file.buffer).digest('hex').slice(0, 24)}.${file.ext}`;
+    try {
+      await mkdir(shotsDir, { recursive: true });
+      const full = path.join(shotsDir, name);
+      await writeFile(full, file.buffer);
+      return ok(res, { path: full, src: `data:image/${file.ext};base64,${file.buffer.toString('base64')}` });
+    } catch (e) { console.error('image write failed:', e); return fail(res, 'Could not keep that image.'); }
   }
 
   // Press allow-listed keys in a pane, in order: {id, key} or {id, keys:[...]}.

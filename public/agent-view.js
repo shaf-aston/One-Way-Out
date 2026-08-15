@@ -17,11 +17,18 @@ let openPane = null, screenTimer = null, rawText = '';
 const history = [];   // what you have sent this session, newest last
 let historyAt = 0;
 
+/* Focused mode: the viewer takes the whole window instead of floating on the map. Remembered
+   on this machine, so once you prefer it you get it every time you open an agent. */
+const FULL_KEY = 'herdr-map.screen-full';
+const getFull = () => { try { return localStorage.getItem(FULL_KEY) === 'on'; } catch { return false; } };
+const setFull = (on) => { try { localStorage.setItem(FULL_KEY, on ? 'on' : 'off'); } catch { /* private mode */ } };
+
 /* The agent's terminal is ~90 columns; the screen is 1600px. Rather than leave half the
    panel empty, the panel takes the width THIS agent's text actually needs. Rounded to 40px
    and only re-applied on a big change, so the 1.5s refresh can never make it twitch. */
 function fitSheet(el, text) {
   const sheet = el.closest('.sheet');
+  if (sheet.closest('.full')) return;    // focused mode already owns the width
   // The 90th-percentile line, not the longest: one stray 300-char path should not
   // stretch the panel across the screen for the other 500 lines.
   const lens = text.split('\n').map((l) => l.length).filter(Boolean).sort((a, b) => a - b);
@@ -67,7 +74,9 @@ function paintScreen() {
   // One chip per message you sent — click to jump back to that exchange.
   const turnsBar = document.querySelector('.turns');
   if (turnsBar) {
-    turnsBar.innerHTML = !reader ? '' : [...el.querySelectorAll('.blk.you')].slice(-12).map((b) =>
+    // Full page has room, so it keeps a longer trail of your own messages to jump back to.
+    const keep = el.closest('.full') ? 40 : 12;
+    turnsBar.innerHTML = !reader ? '' : [...el.querySelectorAll('.blk.you')].slice(-keep).map((b) =>
       `<button data-jump="${b.dataset.turn}" title="Jump to this message">${esc(b.textContent.trim().slice(0, 40))}</button>`).join('');
   }
   // The block log takes the whole panel width on purpose; the terminal is sized instead
@@ -121,6 +130,13 @@ const markView = (ov) => {
     toolsBtn.classList.toggle('on', getTools());
     toolsBtn.textContent = getTools() ? 'Tools: shown' : 'Tools: hidden';
   }
+  const fullBtn = ov.querySelector('[data-act="full"]');
+  if (fullBtn) {
+    const on = ov.classList.contains('full');
+    fullBtn.classList.toggle('on', on);
+    fullBtn.textContent = on ? 'Leave full page' : 'Full page';
+    fullBtn.setAttribute('aria-pressed', String(on));
+  }
 };
 
 export function openSheet(paneId, label, cwd) {
@@ -130,7 +146,7 @@ export function openSheet(paneId, label, cwd) {
   historyAt = history.length;
 
   const ov = document.createElement('div');
-  ov.className = 'overlay agent-overlay';
+  ov.className = `overlay agent-overlay${getFull() ? ' full' : ''}`;
   ov.innerHTML = `<div class="sheet">
     <div class="sheet-head">
       <h3 class="display">${esc(label)}</h3>
@@ -140,6 +156,7 @@ export function openSheet(paneId, label, cwd) {
           <button data-view="terminal" title="The screen exactly as the terminal draws it">Terminal</button>
         </div>
         <button class="btn" data-act="tools" title="Show or hide the tool-call blocks — replies always stay">Tools</button>
+        <button class="btn" data-act="full" title="Give this agent the whole window (F)">Full page</button>
         <button class="btn" data-act="focus">Open in Herdr</button>
         <button class="btn" data-act="close">Close</button>
       </div>
@@ -148,8 +165,10 @@ export function openSheet(paneId, label, cwd) {
     <p class="read-error" role="status" aria-live="polite" hidden></p>
     <div class="turns" aria-label="Jump to a message you sent"></div>
     <div class="screen"></div>
+    <div class="shots" aria-label="Pictures going with your next message"></div>
     <div class="composer">
-      <textarea rows="1" maxlength="4000" placeholder="Reply to this agent — Enter sends, “/” lists commands, ↑ brings back what you sent"></textarea>
+      <textarea rows="1" maxlength="4000" placeholder="Reply to this agent — paste a picture to send it too, Enter sends, “/” lists commands, ↑ brings back what you sent"></textarea>
+      <label class="btn file" title="Send a picture to this agent">Picture<input type="file" accept="image/*" multiple hidden></label>
       <button class="btn primary" data-act="send">Send</button>
       <button class="btn" data-act="enter" title="Just press Enter — accepts the highlighted option">↵ Enter</button>
       <button class="btn" data-act="key-up" title="Move up the agent's menu">↑</button>
@@ -173,11 +192,50 @@ export function openSheet(paneId, label, cwd) {
     setTimeout(refreshScreen, 400);
   };
 
+  /* Pictures waiting to go with the next message. An agent reads files, not clipboards, so
+     each one is already saved and what we hold is its path — the thumbnail is only so you
+     can see what you attached, and the × takes it back off. */
+  let shots = [];                            // { path, src }
+
+  const paintShots = () => {
+    const strip = ov.querySelector('.shots');
+    strip.innerHTML = shots.map((s, i) => `<span class="shot">
+      <img src="${esc(s.src)}" alt="Picture to send">
+      <button data-drop-shot="${i}" title="Do not send this one" aria-label="Remove this picture">×</button>
+    </span>`).join('');
+  };
+
+  /** Keep a pasted or dropped picture, ready to send. */
+  const attachImage = async (file) => {
+    const banner = ov.querySelector('.read-error');
+    const say = (m) => { banner.hidden = false; banner.textContent = m; };
+    if (shots.length >= 6) return say('Six pictures is the most that go with one message.');
+    const dataUrl = await new Promise((done) => {
+      const fr = new FileReader();
+      fr.onload = () => done(fr.result);
+      fr.onerror = () => done(null);
+      fr.readAsDataURL(file);
+    });
+    if (!dataUrl) return say('That file could not be read.');
+    const r = await post('/api/pane/image', { dataUrl });
+    if (!r.ok) return say(r.error);
+    banner.hidden = true;
+    shots.push({ path: r.path, src: r.src });
+    paintShots();
+    box.focus();
+  };
+
   const sendText = async (text) => {
+    // The agent is given each picture's path on its own line, above whatever you wrote —
+    // that is how an agent in a terminal is handed a picture.
+    const full = [...shots.map((s) => s.path), text].filter((s) => s.trim?.() ?? s).join('\n');
+    if (!full.trim()) return;
     if (text.trim()) { history.push(text); historyAt = history.length; }
     box.value = '';
+    shots = [];
+    paintShots();
     autoGrow(box);
-    const r = await post('/api/pane/send', { id: paneId, text });
+    const r = await post('/api/pane/send', { id: paneId, text: full });
     // A failed send is a banner, same as a failed read — never overwrite the transcript
     // you were reading with the error, or the agent's own words disappear underneath it.
     const banner = ov.querySelector('.read-error');
@@ -196,6 +254,12 @@ export function openSheet(paneId, label, cwd) {
     if (act === 'send') sendText(box.value);
     if (act === 'enter') sendText('');
     if (act === 'tools') { setTools(!getTools()); markView(ov); paintScreen(); }
+    if (act === 'full') {
+      ov.classList.toggle('full');
+      setFull(ov.classList.contains('full'));
+      markView(ov);
+      paintScreen();               // the width rule changed, so the text is re-measured
+    }
     if (act === 'focus') post('/api/pane/focus', { id: paneId });
     const KEYS = { 'key-escape': ['escape'], 'key-mode': ['shift+tab'], 'key-up': ['up'], 'key-down': ['down'] };
     // Picking option N walks the menu with its own arrow keys, then presses Enter.
@@ -205,10 +269,40 @@ export function openSheet(paneId, label, cwd) {
     const jump = e.target.closest('[data-jump]');
     if (jump) ov.querySelector(`.blk.you[data-turn="${jump.dataset.jump}"]`)
       ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    const dropShot = e.target.closest('[data-drop-shot]');
+    if (dropShot) { shots.splice(+dropShot.dataset.dropShot, 1); paintShots(); }
+  });
+
+  /* Three ways in, one behaviour: paste a screenshot, drag a file onto the panel, or use
+     the Picture button. Anything that is not an image is ignored rather than guessed at. */
+  const imagesIn = (list) => [...(list ?? [])].filter((f) => f?.type?.startsWith('image/'));
+  ov.addEventListener('paste', (e) => {
+    const files = imagesIn([...(e.clipboardData?.items ?? [])]
+      .filter((i) => i.kind === 'file').map((i) => i.getAsFile()));
+    if (!files.length) return;               // plain text paste is left completely alone
+    e.preventDefault();
+    files.forEach(attachImage);
+  });
+  ov.addEventListener('dragover', (e) => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault(); });
+  ov.addEventListener('drop', (e) => {
+    const files = imagesIn(e.dataTransfer?.files);
+    if (!files.length) return;
+    e.preventDefault();
+    files.forEach(attachImage);
+  });
+  ov.querySelector('.file input').addEventListener('change', (e) => {
+    imagesIn(e.target.files).forEach(attachImage);
+    e.target.value = '';                     // so the same file can be picked again
   });
 
   // A menu option is a button, so Enter and Space pick it the same as a click.
   ov.addEventListener('keydown', (e) => {
+    // F swaps in and out of full page — but not while you are writing the letter f.
+    if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey
+        && !/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) {
+      e.preventDefault();
+      return ov.querySelector('[data-act="full"]').click();
+    }
     const opt = e.target.closest('[data-choice]');
     if (!opt || (e.key !== 'Enter' && e.key !== ' ')) return;
     e.preventDefault();
