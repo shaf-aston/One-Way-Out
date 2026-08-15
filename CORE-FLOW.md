@@ -3,6 +3,10 @@
 A local web page that shows every AI agent running in Herdr, lets you read and answer any of
 them, wire them together, and start new ones — without touching the terminal.
 
+## Where else to look
+
+ what it is for ·  where everything lives ·  how to work in here.
+
 ## Run it
 
 ```
