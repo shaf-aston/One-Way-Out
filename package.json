@@ -1,0 +1,11 @@
+{
+  "name": "herdr-map",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A live, luxury visual map of your Herdr AI agents (levels + status), auto-refreshing.",
+  "scripts": {
+    "start": "node server.mjs",
+    "verify": "node scripts/verify.mjs"
+  }
+}

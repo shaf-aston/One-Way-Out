@@ -1,0 +1,16 @@
+{
+  "port": 4785,
+  "pollIntervalMs": 1500,
+  "herdrBin": "",
+  "openBrowser": true,
+  "flowsDir": "",
+  "teamsDir": "",
+  "projectRoots": ["C:\\Users\\Shaf\\Downloads\\vibe-code-projs"],
+  "defaultAgentCommand": "claude",
+  "workflow": {
+    "stepTimeoutMs": 900000,
+    "settleMs": 6000,
+    "spawnReadyMs": 30000,
+    "maxConcurrent": 3
+  }
+}

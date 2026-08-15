@@ -1,0 +1,35 @@
+[
+  {
+    "name": "Review then fix",
+    "why": "One agent reads the code and lists what is wrong. A second one fixes exactly that list.",
+    "steps": [
+      { "text": "/review-verify Review the changes on this branch. List every real problem with file:line and a concrete fix. Do not change any code.", "waitForIdle": true },
+      { "text": "Apply the fixes the review just listed, one at a time, and say which you skipped and why.", "waitForIdle": true }
+    ]
+  },
+  {
+    "name": "Plan, build, check",
+    "why": "Think first, build second, prove it third — the three steps people skip when they are in a hurry.",
+    "steps": [
+      { "text": "/plan-build Plan this in small steps I can check one at a time. Stop after the plan.", "waitForIdle": true },
+      { "text": "Build step 1 of that plan. Only step 1.", "waitForIdle": true },
+      { "text": "/testing Run the checks on what was just built and fix anything that fails.", "waitForIdle": true }
+    ]
+  },
+  {
+    "name": "Research then write",
+    "why": "Send one agent to find the facts, then hand them to a second one to write it up.",
+    "steps": [
+      { "text": "/knowledge Research this properly and come back with sources, not memory.", "waitForIdle": true },
+      { "text": "Write this up using the research above. Keep it short and say what is still unknown.", "waitForIdle": true }
+    ]
+  },
+  {
+    "name": "Second opinion",
+    "why": "Ask a fresh agent to attack the first one's answer. Cheap way to catch a confident mistake.",
+    "steps": [
+      { "text": "Explain what you just did and why you believe it is correct.", "waitForIdle": true },
+      { "text": "Here is another agent's work in this repo. Try to prove it wrong. Report only what you can show with evidence.", "waitForIdle": true }
+    ]
+  }
+]
