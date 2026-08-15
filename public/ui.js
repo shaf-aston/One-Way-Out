@@ -4,6 +4,18 @@ export const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&':'&amp
 export const basename = (p) => p ? p.replace(/[/\\]+$/,'').split(/[/\\]/).pop() : '';
 
 /**
+ * The one line in the header where the page speaks. Every part of the app says things here,
+ * so it says them the same way: passing `bad` marks it as a problem, and clearing the text
+ * clears the mark too — otherwise the red outlives the message that earned it.
+ */
+export function headMsg(text, { bad = !!text } = {}) {
+  const el = $('head-msg');
+  if (!el) return;
+  el.textContent = text || '';
+  el.classList.toggle('bad', !!text && bad);
+}
+
+/**
  * Flatten the map model to just its agents — the roster both panels pick from.
  * Every agent running `claude` is called "Claude", so two of them are indistinguishable in a
  * list. Where a name repeats, the folder is folded into it: "Claude · blotter".
