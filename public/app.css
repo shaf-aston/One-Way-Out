@@ -321,7 +321,9 @@
   .screen {
     flex:1; min-height:min(58vh,540px); overflow-y:auto; overflow-x:hidden;
     white-space:pre-wrap; overflow-wrap:anywhere;
-    font-family:'Cascadia Mono','Consolas',monospace; font-size:.84rem; line-height:1.7;
+    /* --text-em is the Text-size button. It scales only the agent's words, not the
+       buttons around them — browser zoom already does the whole page. */
+    font-family:'Cascadia Mono','Consolas',monospace; font-size:calc(.84rem * var(--text-em,1)); line-height:1.7;
     color:#d8d2c4; background:#0a0a0c; border:1px solid var(--line-soft); border-radius:12px;
     padding:1.2rem 1.4rem;
     /* The agent picks its own colours; this panel only takes the edge off them so a
@@ -338,7 +340,7 @@
      visually distinct strip that the "Tools" switch can hide outright. */
   .screen.reader {
     white-space:normal; overflow-wrap:break-word;
-    font-family:'Inter',system-ui,sans-serif; font-size:.94rem; line-height:1.6;
+    font-family:'Inter',system-ui,sans-serif; font-size:calc(.94rem * var(--text-em,1)); line-height:1.6;
     padding:.6rem 0;
   }
   .screen.reader .blk { padding:.5rem 1.4rem; margin:0; }

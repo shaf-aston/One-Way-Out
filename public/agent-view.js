@@ -53,6 +53,21 @@ const getView = () => { try { return localStorage.getItem(VIEW_KEY) || 'reader';
 const setView = (v) => { try { localStorage.setItem(VIEW_KEY, v); } catch { /* private mode */ } };
 
 // Whether tool calls show in the block log — remembered the same way as the view itself.
+/* Text size for the agent's own words. Browser zoom scales the whole page including the
+   buttons; this scales only the transcript, and is remembered on this machine. */
+const SIZES = [
+  { key: 'normal', label: 'Text: normal', em: 1 },
+  { key: 'big', label: 'Text: bigger', em: 1.18 },
+  { key: 'biggest', label: 'Text: biggest', em: 1.38 },
+];
+const SIZE_KEY = 'herdr-map.screen-size';
+const getSize = () => {
+  try { return SIZES.find((s) => s.key === localStorage.getItem(SIZE_KEY)) ?? SIZES[0]; }
+  catch { return SIZES[0]; }
+};
+const setSize = (key) => { try { localStorage.setItem(SIZE_KEY, key); } catch { /* private mode */ } };
+const nextSize = () => SIZES[(SIZES.indexOf(getSize()) + 1) % SIZES.length];
+
 const TOOLS_KEY = 'herdr-map.screen-tools';
 const getTools = () => { try { return localStorage.getItem(TOOLS_KEY) !== 'off'; } catch { return true; } };
 const setTools = (on) => { try { localStorage.setItem(TOOLS_KEY, on ? 'on' : 'off'); } catch { /* private mode */ } };
@@ -97,6 +112,7 @@ function paintScreen() {
   el.classList.toggle('hide-tools', reader && !getTools());
   // The live repaint every 1.5s must not slam shut a tool group you just opened.
   const wasOpen = [...el.querySelectorAll('.tool-run')].map((d) => d.open);
+  el.style.setProperty('--text-em', getSize().em);
   el.innerHTML = reader ? toLog(lines) : toTerminal(lines);
   el.querySelectorAll('.tool-run').forEach((d, i) => { if (wasOpen[i]) d.open = true; });
 
@@ -159,6 +175,14 @@ const markView = (ov) => {
     toolsBtn.classList.toggle('on', getTools());
     toolsBtn.textContent = getTools() ? 'Tools: shown' : 'Tools: hidden';
   }
+  const sizeBtn = ov.querySelector('[data-act="size"]');
+  if (sizeBtn) {
+    const now = getSize();
+    ov.querySelector('.screen')?.style.setProperty('--text-em', now.em);
+    sizeBtn.textContent = now.label;
+    sizeBtn.classList.toggle('on', now.key !== 'normal');
+    sizeBtn.title = `Make the agent's text ${nextSize().label.replace('Text: ', '')} (Ctrl and + zooms everything instead)`;
+  }
   const fullBtn = ov.querySelector('[data-act="full"]');
   if (fullBtn) {
     const on = ov.classList.contains('full');
@@ -185,6 +209,7 @@ export function openSheet(paneId, label, cwd) {
           <button data-view="terminal" title="The screen exactly as the terminal draws it">Terminal</button>
         </div>
         <button class="btn" data-act="tools" title="Show or hide the tool-call blocks — replies always stay">Tools</button>
+        <button class="btn" data-act="size">Text: normal</button>
         <button class="btn" data-act="full" title="Give this agent the whole window (F)">Full page</button>
         <button class="btn" data-act="focus">Open in Herdr</button>
         <button class="btn" data-act="close">Close</button>
@@ -314,6 +339,7 @@ export function openSheet(paneId, label, cwd) {
     if (act === 'send') sendText(box.value);
     if (act === 'enter') sendText('');
     if (act === 'tools') { setTools(!getTools()); markView(ov); paintScreen(); }
+    if (act === 'size') { setSize(nextSize().key); markView(ov); paintScreen(); }
     if (act === 'full') {
       ov.classList.toggle('full');
       setFull(ov.classList.contains('full'));

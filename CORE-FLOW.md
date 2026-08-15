@@ -34,7 +34,9 @@ node scripts/verify.mjs # the pure logic checks (npm run verify)
    colours intact (`--format ansi`), and `public/reader.js` (pure) turns those into HTML two ways —
    **Reader**, a full-width block log (one strip per turn or tool call, Warp's block model — a
    "Tools" switch hides the tool-call strips and keeps only what the agent said to you) or
-   **Terminal** (the screen line for line). Both choices are remembered in the browser. A run of
+   **Terminal** (the screen line for line). Both choices are remembered in the browser, as is
+   **Text size**, which cycles the agent's words through three sizes without scaling the
+   buttons around them. A run of
    tool calls folds into one line you can open, and every message you sent is a chip that jumps
    back to it. A table the agent wrote is drawn as a real table, so its columns line up
    instead of collapsing into a row of pipe characters. All bold and colour come from the
