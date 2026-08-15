@@ -83,6 +83,10 @@ const ROLES = [
 ];
 const HEAD = /^\s*(#{1,4})\s+(.*)$/;
 const bullet = (t) => /^\s*(?:[-*+•]|\d+[.)])\s/u.test(t);
+/** A markdown table row. Joining these into a paragraph turns a table into pipe soup. */
+const TABLE = /^\s*\|.*\|\s*$/;
+/** The |---|---| line under a header: it draws the rule, it is not data. */
+const RULE = /^[\s|:-]+$/;
 
 /** Drop the leading glyph — the layout says what it said, so showing it twice is noise. */
 function strip(runs, re) {
@@ -117,11 +121,17 @@ function toBlocks(lines) {
     const head = HEAD.exec(text);
     if (head) { close(); blocks.push({ role: { name: 'head', flow: true }, rows: [], heading: head[2] }); continue; }
 
+    if (TABLE.test(text)) {
+      if (open?.role.name !== 'table') { close(); open = { role: { name: 'table', flow: false }, rows: [] }; }
+      open.rows.push(runs);
+      continue;
+    }
+
     const role = ROLES.find((r) => r.open.test(text));
     if (role) {
       close();
       open = { role, rows: [strip(runs, role.open)] };
-    } else if (open && !bullet(text)) {
+    } else if (open && open.role.name !== 'table' && !bullet(text)) {
       open.rows.push(runs);                       // a wrapped continuation of the open block
     } else {
       close();
@@ -130,6 +140,35 @@ function toBlocks(lines) {
   }
   close();
   return blocks;
+}
+
+/**
+ * Cut one table row at its `|` characters, keeping every colour and bold the agent used.
+ * The outer pipes leave an empty cell at each end; those are the border, not a column.
+ */
+function cells(runs) {
+  const out = [[]];
+  for (const r of runs) {
+    r.t.split('|').forEach((t, i) => {
+      if (i) out.push([]);
+      if (t) out[out.length - 1].push({ ...r, t });
+    });
+  }
+  if (!plain(out[0]).trim()) out.shift();
+  if (out.length && !plain(out[out.length - 1]).trim()) out.pop();
+  // The padding around a cell is the table's own spacing, and the CSS puts it back.
+  return out.map((c) => c.map((r, i) => ({ ...r, t: i ? r.t : r.t.replace(/^\s+/, '') }))
+    .map((r, i, a) => (i === a.length - 1 ? { ...r, t: r.t.replace(/\s+$/, '') } : r))
+    .filter((r) => r.t));
+}
+
+/** A markdown table drawn as a real table, so its columns line up whatever the width. */
+export function toTable(rows) {
+  const body = rows.filter((r) => !RULE.test(plain(r)));
+  const head = body.length > 1 && rows.length > body.length ? body.shift() : null;
+  const tr = (cs, tag) => `<tr>${cs.map((c) => `<${tag}>${c.map(span).join('').trim()}</${tag}>`).join('')}</tr>`;
+  return `<table class="md">${head ? `<thead>${tr(cells(head), 'th')}</thead>` : ''}`
+    + `<tbody>${body.map((r) => tr(cells(r), 'td')).join('')}</tbody></table>`;
 }
 
 const flowText = (rows) => rows.flatMap((r, i) => (i ? [{ ...r[0], t: ' ' }, ...r] : r))
@@ -144,6 +183,7 @@ const flowText = (rows) => rows.flatMap((r, i) => (i ? [{ ...r[0], t: ' ' }, ...
 export function toReader(lines) {
   return toBlocks(lines).map((b) => {
     if (b.role.name === 'head') return `<h4>${esc(b.heading)}</h4>`;
+    if (b.role.name === 'table') return toTable(b.rows);
     return b.role.flow
       ? `<p class="${b.role.name}">${flowText(b.rows).map(span).join('')}</p>`
       : `<pre class="${b.role.name}">${b.rows.map((r) => r.map(span).join('')).join('\n')}</pre>`;
@@ -212,7 +252,7 @@ export function toLog(lines) {
     seen += 1;
     if (b.role.name === 'head') { flush(); html.push(`<h4>${esc(b.heading)}</h4>`); continue; }
     const tool = isTool(b.role.name);
-    const body = b.role.flow
+    const body = b.role.name === 'table' ? toTable(b.rows) : b.role.flow
       ? `<p>${flowText(b.rows).map(span).join('')}</p>`
       : `<pre>${b.rows.map((r) => r.map(span).join('')).join('\n')}</pre>`;
     const tag = tool ? `<div class="blk-tag">${b.role.name === 'chrome' ? 'status' : 'tool'}</div>` : '';

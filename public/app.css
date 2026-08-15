@@ -213,7 +213,7 @@
   }
   .sheet {
     /* Panels are wide; the agent viewer overrides --sheet-w to fit its own text. */
-    width:var(--sheet-w,min(1500px,96vw)); max-width:min(1500px,96vw);
+    width:var(--sheet-w,min(1840px,97vw)); max-width:min(1840px,97vw);
     max-height:94vh; display:flex; flex-direction:column; gap:.85rem;
     border:1px solid var(--line); border-radius:18px; padding:1.2rem 1.3rem;
     background:linear-gradient(180deg,#17171c,#101014); box-shadow:var(--shadow);
@@ -356,6 +356,18 @@
     opacity:.62; margin-top:-1px;
   }
   .screen.reader .blk.tool pre { white-space:pre-wrap; overflow-wrap:anywhere; }
+  /* Tables the agent wrote. Columns line up whatever the width; a wide one scrolls
+     inside itself so the reading column never scrolls sideways. */
+  .screen table.md {
+    display:block; overflow-x:auto; max-width:100%;
+    border-collapse:collapse; font-size:.86rem; margin:.15rem 0;
+  }
+  .screen table.md th, .screen table.md td {
+    border:1px solid var(--line-soft); padding:.34rem .6rem;
+    text-align:left; vertical-align:top; white-space:normal;
+  }
+  .screen table.md th { color:var(--gold); font-weight:500; background:rgba(255,255,255,.028); }
+  .screen table.md tbody tr:nth-child(even) { background:rgba(255,255,255,.016); }
   .screen.reader .blk-tag { font-size:.6rem; letter-spacing:.16em; text-transform:uppercase; color:var(--faint); margin-bottom:.25rem; }
   .screen.reader.hide-tools .blk.tool, .screen.reader.hide-tools .tool-run { display:none; }
   /* A run of tool calls folds to one line — the count is the whole story until opened. */

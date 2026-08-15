@@ -110,7 +110,7 @@ function paintScreen() {
   }
   // The block log takes the whole panel width on purpose; the terminal is sized instead
   // to however many columns this particular agent is drawing.
-  if (reader) el.closest('.sheet')?.style.setProperty('--sheet-w', 'min(1300px,96vw)');
+  if (reader) el.closest('.sheet')?.style.setProperty('--sheet-w', 'min(1840px,97vw)');
   else fitSheet(el, lines.map((l) => l.map((r) => r.t).join('')).join('\n'));
   if (atBottom) el.scrollTop = el.scrollHeight;
 

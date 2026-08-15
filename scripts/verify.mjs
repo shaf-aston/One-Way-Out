@@ -218,6 +218,21 @@ assert.equal(toReader(parseAnsi('<b>not markup</b>')), '<p class="say"><span>&lt
 assert.equal(toReader(parseAnsi('')), '');
 assert.equal(toTerminal(parseAnsi(null)), '');
 
+// A table the agent wrote stays a table: joining its rows into a paragraph is what turned
+// them into pipe soup on screen.
+const table = toReader(parseAnsi('● Here:\n\n| Skill | What it does |\n| --- | --- |\n| a-skill | blocks bad git |\n| b-skill | converts casts |'));
+assert.ok(/<table class="md">/.test(table), 'pipe rows become a real table');
+assert.ok(/<thead><tr><th><span>Skill<\/span><\/th><th><span>What it does<\/span><\/th><\/tr><\/thead>/.test(table),
+  'the first row is the header and the |---| rule is not a row of its own');
+assert.equal((table.match(/<tr>/g) || []).length, 3, 'header plus two rows — the rule line is dropped');
+assert.ok(!/\|/.test(table), 'no pipe survives into the output');
+assert.ok(/<p class="say"><span>Here:<\/span><\/p>/.test(table), 'the sentence above the table is still its own paragraph');
+// One row on its own has no header rule, so every row is data rather than a guessed header.
+const oneRow = toReader(parseAnsi('| just | one |'));
+assert.ok(/<tbody><tr><td>/.test(oneRow) && !/<thead>/.test(oneRow), 'no rule line means no header');
+assert.ok(/<th><span>&lt;b&gt;x<\/span><\/th>/.test(toReader(parseAnsi('| <b>x | y |\n| --- | --- |\n| 1 | 2 |'))),
+  'cell text is escaped like everything else');
+
 const log = toLog(parsed);
 assert.ok(log.includes('class="blk out tool"') && log.includes('<div class="blk-tag">tool</div>'),
   'tool output is tagged so the page can hide it — a response block never carries that tag');

@@ -36,7 +36,9 @@ node scripts/verify.mjs # the pure logic checks (npm run verify)
    "Tools" switch hides the tool-call strips and keeps only what the agent said to you) or
    **Terminal** (the screen line for line). Both choices are remembered in the browser. A run of
    tool calls folds into one line you can open, and every message you sent is a chip that jumps
-   back to it. All bold and colour come from the agent itself; nothing is invented.
+   back to it. A table the agent wrote is drawn as a real table, so its columns line up
+   instead of collapsing into a row of pipe characters. All bold and colour come from the
+   agent itself; nothing is invented.
 5. **Answer an agent** — typing in the viewer posts to `/api/pane/send`, which types the text into
    that pane and presses Enter. When the agent is waiting on a numbered menu, every option is
    clickable: `/api/pane/keys` presses ↑/↓/Enter for you, from a fixed allow-list in
