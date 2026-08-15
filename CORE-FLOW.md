@@ -5,7 +5,7 @@ them, wire them together, and start new ones — without touching the terminal.
 
 ## Where else to look
 
- what it is for ·  where everything lives ·  how to work in here.
+`PRD.md` what it is for · `MAP.md` where everything lives · `CLAUDE.md` how to work in here.
 
 ## Run it
 
@@ -68,4 +68,5 @@ node scripts/verify.mjs # the pure logic checks (npm run verify)
 | **wire** | one line drawn between two agents on the map — it *is* a connection, so it carries a kind |
 | **workflow / step** | a saved relay: one agent, one message, then the next |
 | **preset** | a ready-made workflow shipped in `presets/workflows.json` |
-| **view** | a place with its own link — the map, board, connections, workflows |
+| **view** | a place with its own link — the map, connections, workflows |
+| **shot** | a picture pasted into a reply; saved to disk so the agent can open it by path |
