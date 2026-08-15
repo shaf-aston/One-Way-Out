@@ -10,7 +10,7 @@ import { buildBriefs, validateTeam, cleanWires, teamsFromWires, MAX_WIRES } from
 import { slugify, isValidId } from '../src/ids.mjs';
 import { listProjects } from '../src/projects.mjs';
 import { clean } from '../public/ui.js';
-import { parseAnsi, toReader, toTerminal, toLog, chooseKeys } from '../public/reader.js';
+import { parseAnsi, toReader, toTerminal, toLog, chooseKeys, readMode, stepsToMode } from '../public/reader.js';
 import { parseHash, linkTo } from '../public/router.js';
 
 // 1) Real empty snapshot shape captured from `herdr api snapshot` (one shell pane, no agents).
@@ -245,6 +245,22 @@ assert.ok(!prose.includes('data-choice'), 'a single numbered line is prose, not 
 const logTurns = toLog(parseAnsi('❯ first ask\n\n● doing it\n\n❯ second ask'));
 assert.ok(logTurns.includes('data-turn="1"') && logTurns.includes('data-turn="2"'),
   'each message you sent is numbered so the page can jump to it');
+
+// ── Which mode an agent is in: read from its own screen, never guessed ──
+assert.equal(readMode('  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents'), 'auto');
+assert.equal(readMode('  ⏵⏵ accept edits on · 1 shell'), 'auto');
+assert.equal(readMode('  ⏵⏵ plan mode on (shift+tab to cycle)'), 'plan');
+assert.equal(readMode('❯ ready\n  shift+tab to cycle'), 'normal');
+assert.equal(readMode('just some output'), null, 'a screen that does not say is unknown, not a guess');
+assert.equal(readMode(''), null);
+assert.equal(readMode(undefined), null);
+assert.equal(readMode(['auto mode on', ...Array(9).fill('later output')].join('\n')), null,
+  'a mode named far up the transcript is history, not the mode it is in now');
+
+assert.equal(stepsToMode('normal', 'auto'), 1);
+assert.equal(stepsToMode('auto', 'auto'), 0, 'already there means press nothing');
+assert.equal(stepsToMode('auto', 'normal'), 2, 'the cycle wraps through plan mode');
+assert.equal(stepsToMode(null, 'auto'), -1, 'an unknown start is never turned into a press count');
 
 /* ── the address bar is the app's state ── */
 const VIEWS = ['sessions', 'teams', 'flows'];

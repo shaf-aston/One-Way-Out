@@ -411,6 +411,33 @@
     line-height:1.5; max-height:200px; overflow:auto;
   }
   .composer textarea:focus { border-color:var(--gold); }
+  /* Under the reply box. Send is the only thing done every time, so it is the only thing
+     with weight up top; these three are the occasional ones, and Stop is set apart because
+     it interrupts work that is actually running. */
+  .agent-bar { display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; }
+  .agent-bar .btn small { color:var(--faint); margin-left:.35rem; font-size:.62rem; letter-spacing:.1em; }
+  .agent-bar .btn.danger { margin-left:auto; color:var(--blocked); border-color:rgba(224,122,84,.3); }
+  .agent-bar .btn.danger:hover { border-color:var(--blocked); background:rgba(224,122,84,.1); }
+  .composer .btn.primary small { color:rgba(0,0,0,.45); }
+
+  /* The pill says what the agent is doing about permission before it offers to change it —
+     the colour is a second signal, never the only one. */
+  .mode-pill[data-mode="auto"] { color:var(--working); border-color:rgba(224,173,70,.35); }
+  .mode-pill[data-mode="plan"] { color:var(--done); border-color:rgba(155,189,132,.3); }
+  .mode-pill[data-mode="unknown"] { color:var(--muted); border-style:dashed; }
+  .mode-pill[disabled] { opacity:.55; cursor:progress; }
+
+  /* The keys you only need when a menu did not come out clickable. */
+  .fallback-keys > summary {
+    list-style:none; cursor:pointer; font-size:.66rem; letter-spacing:.16em;
+    text-transform:uppercase; color:var(--faint); padding:.3rem 0;
+  }
+  .fallback-keys > summary::-webkit-details-marker { display:none; }
+  .fallback-keys > summary::before { content:'▸ '; }
+  .fallback-keys[open] > summary::before { content:'▾ '; }
+  .fallback-keys > summary:hover, .fallback-keys > summary:focus-visible { color:var(--muted); outline:none; }
+  .fallback-keys > div { display:flex; gap:.4rem; flex-wrap:wrap; padding-top:.3rem; }
+
   /* Pictures queued for the next message. Small on purpose — it is a receipt that the
      picture attached, not a gallery. */
   .shots { display:flex; flex-wrap:wrap; gap:.5rem; }

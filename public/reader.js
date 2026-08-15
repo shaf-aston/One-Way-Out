@@ -228,3 +228,44 @@ export function toLog(lines) {
   flush();
   return html.join('');
 }
+
+/* ── Which mode the agent is working in ──
+   Claude prints its own mode on its status line ("auto mode on (shift+tab to cycle)").
+   Reading it is the difference between switching TO a mode and pressing shift+tab a
+   guessed number of times. The words belong to Claude, not to us: when it renames them
+   this returns null, and the UI must say "unknown" rather than pretend. */
+
+/** The modes shift+tab cycles through, in the order it cycles them. */
+export const MODES = {
+  normal: { label: 'Asks before each step' },
+  auto: { label: 'Accepting all plans' },
+  plan: { label: 'Planning only' },
+};
+
+/**
+ * Read the agent's current mode off its own screen.
+ * @param {string} text - the pane as plain text
+ * @returns {'normal'|'auto'|'plan'|null} null when the screen does not say
+ */
+export function readMode(text) {
+  // Only the last lines: the status line is the bottom of the screen, and an older mention
+  // scrolled up the transcript is history, not the mode it is in now.
+  const tail = String(text ?? '').split('\n').slice(-6).join('\n').toLowerCase();
+  if (/plan mode on/.test(tail)) return 'plan';
+  if (/auto mode on|accept edits on|auto-accept edits on/.test(tail)) return 'auto';
+  // A prompt with no mode banner is the plain one — but only if a prompt is visible at all.
+  if (/shift\+tab|⏵⏵/.test(tail)) return 'normal';
+  return null;
+}
+
+/**
+ * How many shift+tab presses go from one mode to another. Each press is still checked
+ * against the screen afterwards; this only says where to aim.
+ * @returns {number} 0 when already there, -1 when either end is unknown
+ */
+export function stepsToMode(from, to) {
+  const order = Object.keys(MODES);
+  const a = order.indexOf(from), b = order.indexOf(to);
+  if (a < 0 || b < 0) return -1;
+  return (b - a + order.length) % order.length;
+}

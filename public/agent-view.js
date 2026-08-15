@@ -4,7 +4,7 @@
 // leaves no history entry. Everything it shows comes from the agent itself (reader.js turns
 // the terminal's own colours into HTML); nothing here invents text.
 import { $, esc, get, post, autoGrow, attachPalette, clean, confirmOnce } from './ui.js';
-import { parseAnsi, toLog, toTerminal, chooseKeys } from './reader.js';
+import { parseAnsi, toLog, toTerminal, chooseKeys, readMode, MODES } from './reader.js';
 import { isWiring, finishFromKeyboard } from './connect.js';
 import { go } from './router.js';
 
@@ -57,7 +57,36 @@ const TOOLS_KEY = 'herdr-map.screen-tools';
 const getTools = () => { try { return localStorage.getItem(TOOLS_KEY) !== 'off'; } catch { return true; } };
 const setTools = (on) => { try { localStorage.setItem(TOOLS_KEY, on ? 'on' : 'off'); } catch { /* private mode */ } };
 
+/* ── The mode pill: what the agent does about permission, and how to change it ──
+   It reports before it acts. "Accepting all plans" is the mode where the agent stops asking,
+   and one click aims for it — but every press is checked against the agent's own screen, so
+   a press that did not land can never be mistaken for one that did. */
+let switching = false;
+
+function paintMode() {
+  const pill = document.querySelector('.mode-pill');
+  if (!pill) return;
+  const now = readMode(clean(rawText));
+  pill.dataset.mode = now ?? 'unknown';
+  pill.disabled = switching;
+  if (switching) { pill.textContent = 'Switching…'; return; }
+  if (!now) {
+    // Fail loud: the words on the screen changed, so say so, and offer the one honest
+    // action left — a single press, then look again.
+    pill.textContent = 'Mode unknown · press Shift+Tab once';
+    pill.title = "This agent's screen does not say which mode it is in. Clicking presses Shift+Tab once and looks again.";
+    return;
+  }
+  pill.textContent = now === 'auto'
+    ? `${MODES.auto.label} · back to asking`
+    : `${MODES[now].label} · accept all plans`;
+  pill.title = now === 'auto'
+    ? 'This agent is not asking before each step. Click to make it ask again.'
+    : 'Click to stop this agent asking before each step.';
+}
+
 function paintScreen() {
+  paintMode();
   const el = document.querySelector('.screen');
   if (!el) return;
   const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
@@ -168,13 +197,24 @@ export function openSheet(paneId, label, cwd) {
     <div class="shots" aria-label="Pictures going with your next message"></div>
     <div class="composer">
       <textarea rows="1" maxlength="4000" placeholder="Reply to this agent — paste a picture to send it too, Enter sends, “/” lists commands, ↑ brings back what you sent"></textarea>
-      <label class="btn file" title="Send a picture to this agent">Picture<input type="file" accept="image/*" multiple hidden></label>
-      <button class="btn primary" data-act="send">Send</button>
-      <button class="btn" data-act="enter" title="Just press Enter — accepts the highlighted option">↵ Enter</button>
-      <button class="btn" data-act="key-up" title="Move up the agent's menu">↑</button>
-      <button class="btn" data-act="key-down" title="Move down the agent's menu">↓</button>
-      <button class="btn" data-act="key-escape" title="Press Esc in the agent — stops what it is doing">Esc</button>
-      <button class="btn" data-act="key-mode" title="Press Shift+Tab in the agent — switches its working mode">Mode ⇧⇥</button>
+      <label class="btn file" title="Send a picture to this agent">Attach image<input type="file" accept="image/*" multiple hidden></label>
+      <button class="btn primary" data-act="send">Send <small>↵</small></button>
+    </div>
+    <!-- Under the box, in order of how often it is true: what the agent is doing about
+         permission, the keys you only need when a menu is not clickable, and — set apart,
+         because it interrupts real work — stopping it. -->
+    <div class="agent-bar">
+      <button class="btn mode-pill" data-act="mode" aria-live="polite">Reading the agent's mode…</button>
+      <details class="fallback-keys">
+        <summary>Menu keys</summary>
+        <div>
+          <button class="btn" data-act="key-up">Move up <small>↑</small></button>
+          <button class="btn" data-act="key-down">Move down <small>↓</small></button>
+          <button class="btn" data-act="enter">Choose highlighted <small>↵</small></button>
+        </div>
+      </details>
+      <button class="btn danger" data-act="key-escape"
+        title="Interrupts whatever the agent is doing right now">Stop agent <small>Esc</small></button>
     </div>
     <div class="hintline">This is the agent's own screen, live. Claude's slash commands work here — type “/model sonnet” and send. “↵ Enter” accepts a highlighted menu choice.</div>
   </div>`;
@@ -190,6 +230,26 @@ export function openSheet(paneId, label, cwd) {
     const banner = ov.querySelector('.read-error');
     if (!r.ok && banner) { banner.hidden = false; banner.textContent = `That did not land — ${r.error}`; }
     setTimeout(refreshScreen, 400);
+  };
+
+  /** Aim for a mode: press, look, press again — never a guessed run of presses. */
+  const goToMode = async (want) => {
+    switching = true;
+    paintMode();
+    for (let i = 0; i < 4; i++) {
+      await post('/api/pane/keys', { id: paneId, keys: ['shift+tab'] });
+      await new Promise((r) => setTimeout(r, 450));
+      await refreshScreen();
+      if (readMode(clean(rawText)) === want) break;
+      if (want === null) break;                 // unknown mode: exactly one press, then stop
+    }
+    switching = false;
+    paintMode();
+    if (want && readMode(clean(rawText)) !== want) {
+      const banner = ov.querySelector('.read-error');
+      banner.hidden = false;
+      banner.textContent = 'That did not change the mode. Open the agent in Herdr and check it is at a prompt.';
+    }
   };
 
   /* Pictures waiting to go with the next message. An agent reads files, not clipboards, so
@@ -261,7 +321,12 @@ export function openSheet(paneId, label, cwd) {
       paintScreen();               // the width rule changed, so the text is re-measured
     }
     if (act === 'focus') post('/api/pane/focus', { id: paneId });
-    const KEYS = { 'key-escape': ['escape'], 'key-mode': ['shift+tab'], 'key-up': ['up'], 'key-down': ['down'] };
+    if (act === 'mode' && !switching) {
+      const now = readMode(clean(rawText));
+      // Unknown means unknown: one press and another look, never a guessed run.
+      goToMode(now === null ? null : (now === 'auto' ? 'normal' : 'auto'));
+    }
+    const KEYS = { 'key-escape': ['escape'], 'key-up': ['up'], 'key-down': ['down'] };
     // Picking option N walks the menu with its own arrow keys, then presses Enter.
     const opt = e.target.closest('[data-choice]');
     const keys = KEYS[act] || (opt && chooseKeys(+opt.dataset.choice, +opt.dataset.choiceOf));

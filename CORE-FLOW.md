@@ -41,6 +41,10 @@ node scripts/verify.mjs # the pure logic checks (npm run verify)
    that pane and presses Enter. When the agent is waiting on a numbered menu, every option is
    clickable: `/api/pane/keys` presses ↑/↓/Enter for you, from a fixed allow-list in
    `src/herdr.mjs` (a key not on it fails the whole request, so half a sequence never lands).
+   Under the box: **the mode pill**, which reads the agent's own status line (`readMode` in
+   `public/reader.js`) to say whether it asks before each step, and switches it to *accepting
+   all plans* by pressing Shift+Tab and re-reading until the screen agrees. A screen that does
+   not say shows "unknown" and presses once — it never presses a guessed number of times.
 6. **Draw the connections, on the map itself** — drag the dot on an agent card to another agent and a
    menu asks what the connection means right where you dropped it; a labelled arrow appears
    (`public/index.html`, the `#links` layer). `public/wires.js` holds the lines and nothing else —
@@ -70,3 +74,4 @@ node scripts/verify.mjs # the pure logic checks (npm run verify)
 | **preset** | a ready-made workflow shipped in `presets/workflows.json` |
 | **view** | a place with its own link — the map, connections, workflows |
 | **shot** | a picture pasted into a reply; saved to disk so the agent can open it by path |
+| **mode** | what an agent does about permission: asks first · accepting all plans · planning only |
