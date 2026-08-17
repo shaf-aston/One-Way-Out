@@ -47,7 +47,6 @@ turns **green (done)** it's finished.
 | `public/index.html` | the map, the agent viewer, the new-agent dialog, all the styling | view |
 | `public/ui.js` | shared view helpers: fetch, escaping, slash palette, screen tidying | view |
 | `public/flows.js` | the workflow panel | view |
-| `public/team.js` | the connections panel | view |
 | `scripts/verify.mjs` | runnable checks for the **pure core only** — not the DOM panels | test |
 
 Swap `src/herdr.mjs` to point at a different data source and nothing else changes.
@@ -76,8 +75,8 @@ the job, and send. The line above the box always says in plain words what Send w
 | **Colleagues** | Every agent gets the job as an equal and must check with the others before touching shared ground. |
 
 Nothing is faked: each agent receives the real `herdr` commands to message, wait for, and read the
-others, and it has to run them. Name a connection to save it — saved ones become one-click chips on
-the map and inside the agent viewer. They live in `~/.claude/herdr-teams`.
+others, and it has to run them. Agents never talk to each other unless you draw a line and send a
+job, reply to one yourself, or run a workflow — the app only ever reads on its own.
 
 ## Agent manager
 

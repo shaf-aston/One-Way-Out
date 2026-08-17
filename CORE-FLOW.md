@@ -23,7 +23,7 @@ node scripts/verify.mjs # the pure logic checks (npm run verify)
 3. **Serve it** — `server.mjs` is transport only: it hands the browser JSON and static files and
    holds no rules of its own.
    **Where you are is a link.** `public/router.js` (pure) reads the address bar: `#/` is the map,
-   `#/teams` and `#/flows` are places you can bookmark, reload into, and back out of
+   `#/flows` is a place you can bookmark, reload into, and back out of
    with the browser's own Back button. Inside one the map does not vanish: it narrows to a rail
    down the left so blocked agents stay visible while you work, and "Hide map" collapses that rail
    to give the view the whole window (remembered, and it never touches the URL).
@@ -75,6 +75,6 @@ node scripts/verify.mjs # the pure logic checks (npm run verify)
 | **wire** | one line drawn between two agents on the map — it *is* a connection, so it carries a kind |
 | **workflow / step** | a saved relay: one agent, one message, then the next |
 | **preset** | a ready-made workflow shipped in `presets/workflows.json` |
-| **view** | a place with its own link — the map, connections, workflows |
+| **view** | a place with its own link — the map, workflows |
 | **shot** | a picture pasted into a reply; saved to disk so the agent can open it by path |
 | **mode** | what an agent does about permission: asks first · accepting all plans · planning only |

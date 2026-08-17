@@ -256,20 +256,20 @@ assert.equal(stepsToMode('auto', 'normal'), 2, 'the cycle wraps through plan mod
 assert.equal(stepsToMode(null, 'auto'), -1, 'an unknown start is never turned into a press count');
 
 /* ── the address bar is the app's state ── */
-const VIEWS = ['sessions', 'teams', 'flows'];
+const VIEWS = ['sessions', 'flows'];
 assert.deepEqual(parseHash('#/flows', VIEWS), { view: 'flows', arg: null });
 assert.deepEqual(parseHash('#/board', VIEWS), { view: 'sessions', arg: null },
   'the old Board link lands on the map, which is where connecting now happens');
-assert.deepEqual(parseHash('#/teams/team%20one', VIEWS), { view: 'teams', arg: 'team one' },
+assert.deepEqual(parseHash('#/flows/flow%20one', VIEWS), { view: 'flows', arg: 'flow one' },
   'a name with a space survives the round trip through the URL');
 assert.deepEqual(parseHash('', VIEWS), { view: 'sessions', arg: null }, 'no hash means the map');
 assert.deepEqual(parseHash('#/nonsense', VIEWS), { view: 'sessions', arg: null },
   'an unknown link lands on the map instead of a blank screen');
-assert.deepEqual(parseHash('#/teams/%E0%A4%A', VIEWS), { view: 'teams', arg: '%E0%A4%A' },
+assert.deepEqual(parseHash('#/flows/%E0%A4%A', VIEWS), { view: 'flows', arg: '%E0%A4%A' },
   'a hand-mangled percent-code must not crash the router — the raw text is kept');
 assert.equal(linkTo('sessions'), '#/');
-assert.equal(linkTo('teams', 'team one'), '#/teams/team%20one');
-assert.deepEqual(parseHash(linkTo('teams', 'a/b'), VIEWS), { view: 'teams', arg: 'a/b' },
+assert.equal(linkTo('flows', 'flow one'), '#/flows/flow%20one');
+assert.deepEqual(parseHash(linkTo('flows', 'a/b'), VIEWS), { view: 'flows', arg: 'a/b' },
   'a slash inside a name does not split into a second route segment');
 
 // ── The lines drawn on the map, as they arrive from a browser ──

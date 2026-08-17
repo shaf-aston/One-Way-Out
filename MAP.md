@@ -29,7 +29,6 @@ added, moved, or deleted.
 - `public/agent-view.js` — one agent's live screen: read, reply, press keys, send pictures, full page.
 - `public/connect.js` — drawing lines between agents, the kind menu, the send-one-job bar.
 - `public/wires.js` — the lines themselves and what they mean. Draws nothing.
-- `public/team.js` — the Connections panel: pick a leader and teammates from a list.
 - `public/flows.js` — the Workflows panel: build and run a chain of agent steps.
 - `public/reader.js` — turns a terminal's own ANSI colours into HTML. Pure.
 - `public/router.js` — what a URL means. Pure, and the only place a link is spelled.
@@ -51,6 +50,5 @@ added, moved, or deleted.
 - `scripts/verify.mjs` — every pure-logic check. One file, run by `npm run verify`.
 
 ## Written at runtime (not in this repo)
-- `~/.claude/herdr-teams/` — saved connections
 - `~/.claude/herdr-flows/` — saved workflows
 - `~/.claude/herdr-shots/` — pictures pasted into a reply, kept so an agent can open them
