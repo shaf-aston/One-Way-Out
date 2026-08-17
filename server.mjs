@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { exec } from 'node:child_process';
 import { resolveHerdrBin, getSnapshot, readPane, runInPane, focusPane, closePane, startAgent, sendKeys, PANE_KEYS } from './src/herdr.mjs';
 import { buildModel, listAgents } from './src/model.mjs';
-import { buildBriefs, validateTeam, cleanWires, teamsFromWires, KINDS } from './src/team.mjs';
+import { buildBriefs, cleanWires, teamsFromWires, KINDS } from './src/team.mjs';
 import { listCommands } from './src/commands.mjs';
 import { validateFlow } from './src/flows.mjs';
 import { list, save, remove } from './src/store.mjs';
@@ -22,7 +22,6 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 const config = JSON.parse(await readFile(path.join(root, 'config.json'), 'utf8'));
 const herdrBin = resolveHerdrBin(config.herdrBin);
 const flowsDir = config.flowsDir || path.join(os.homedir(), '.claude', 'herdr-flows');
-const teamsDir = config.teamsDir || path.join(os.homedir(), '.claude', 'herdr-teams');
 // Where a pasted picture is kept so an agent can open it by path.
 const shotsDir = config.shotsDir || path.join(os.homedir(), '.claude', 'herdr-shots');
 const limits = {
@@ -179,50 +178,9 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // ── Teams: a saved connection between agents, dispatched with one task ──
-  if (url.pathname === '/api/teams' && !post) {
-    return ok(res, { teams: await list(teamsDir), kinds: KINDS });
-  }
-
-  if (url.pathname === '/api/teams/save' && post) {
-    const check = validateTeam(await jsonBody(req));
-    if (!check.ok) return fail(res, check.error);
-    try { return ok(res, { team: await save(teamsDir, check.team) }); }
-    catch (e) { console.error('team save failed:', e); return fail(res, 'Could not save that team.'); }
-  }
-
-  if (url.pathname === '/api/teams/delete' && post) {
-    const body = await jsonBody(req);
-    if (!isValidId(body?.id)) return fail(res, 'Bad team id', 400);
-    try { await remove(teamsDir, body.id); return ok(res); }
-    catch (e) { console.error('team delete failed:', e); return fail(res, 'Could not delete that team.'); }
-  }
-
-  // Tell every agent in a connection what it is part of, and hand them the job.
-  // {kind, leaderId, memberIds[], task} — who gets a message depends on the kind.
-  if (url.pathname === '/api/teams/dispatch' && post) {
-    const check = validateTeam(await jsonBody(req), { requireName: false });
-    if (!check.ok) return fail(res, check.error);
-    const { kind, leaderId, memberIds, task } = check.team;
-    if (!task.trim()) return fail(res, 'Type the job for these agents.', 400);
-
-    const snap = await getSnapshot(herdrBin);
-    if (!snap.ok) return fail(res, snap.error);
-    const byId = new Map(listAgents(buildModel(snap.snapshot)).map((a) => [a.id, a]));
-    const leader = leaderId ? byId.get(leaderId) : null;
-    const members = memberIds.map((id) => byId.get(id)).filter(Boolean);
-    if (leaderId && !leader) return fail(res, 'The agent that leads is no longer running — pick another.');
-    if (members.length < memberIds.length) {
-      const gone = memberIds.length - members.length;
-      return fail(res, `${gone} agent${gone === 1 ? ' is' : 's are'} no longer running — untick ${gone === 1 ? 'it' : 'them'}.`);
-    }
-
-    const briefs = buildBriefs({ bin: herdrBin, kind, leader, members, task: task.trim() });
-    const results = await Promise.all(briefs.map((b) =>
-      runInPane(herdrBin, b.paneId, b.text).then(() => true, (e) => { console.error('dispatch failed:', e); return false; })));
-    const sent = results.filter(Boolean).length;
-    if (!sent) return fail(res, 'Herdr would not take the message. Open an agent and check it is at a prompt.');
-    return ok(res, { sent, failed: briefs.length - sent });
+  // The three meanings a line between agents can have — the words live in src/team.mjs.
+  if (url.pathname === '/api/kinds' && !post) {
+    return ok(res, { kinds: KINDS });
   }
 
   // ── The lines drawn on the map: give every joined-up group the same job, each its own part ──
@@ -322,6 +280,5 @@ server.listen(config.port, '127.0.0.1', () => {
   console.log(`Herdr Map running at ${target}`);
   console.log(`Using Herdr at: ${herdrBin}`);
   console.log(`Workflows saved in: ${flowsDir}`);
-  console.log(`Teams saved in:     ${teamsDir}`);
   openBrowser();
 });

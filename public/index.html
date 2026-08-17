@@ -16,7 +16,6 @@
       <span class="flow-msg" id="head-msg" role="status" aria-live="polite"></span>
       <button class="btn" id="new-agent" title="Start an agent in a folder (N)">＋ New agent</button>
       <a class="btn" href="#/" data-nav="sessions" title="The map of every agent">Sessions</a>
-      <a class="btn" href="#/teams" data-nav="teams" title="Wire agents together (T)">Connect</a>
       <a class="btn" href="#/flows" data-nav="flows" title="Chain agents one after another (W)">Workflows</a>
       <div class="live" id="live"><span class="dot-live"></span><span id="live-text">connecting…</span></div>
     </div>
@@ -24,7 +23,6 @@
 
   <main>
     <section class="counts" id="counts" hidden></section>
-    <section class="teams-strip" id="teams-strip" aria-label="Saved teams"></section>
     <!-- Appears only once lines exist. Drawing them is the point; this is what they are FOR. -->
     <section class="wired" id="wired" hidden>
       <p class="wired-sum" id="wired-sum"></p>
@@ -67,7 +65,6 @@
 <script type="module">
   import { $, esc, basename, get, post, confirmOnce, onOverlayEscape, headMsg } from './ui.js';
   import { openFlows, setModel, setPoll } from './flows.js';
-  import { openTeam, refreshTeam, loadTeams, onTeamsChange, setModel as setTeamModel } from './team.js';
   import { drawLinks } from './connect.js';
   import { openSheet, closeSheet, setPollMs, watchCards } from './agent-view.js';
   import { startRouter, linkTo, go } from './router.js';
@@ -133,7 +130,7 @@
      The panels themselves are unchanged. They still build an overlay; this lifts that
      overlay out of the floating layer and into the page, which is the whole difference
      between "a popup over the map" and "a place you navigated to". */
-  const VIEWS = { teams: (arg) => openTeam(arg), flows: () => openFlows() };
+  const VIEWS = { flows: () => openFlows() };
   let at = { view: 'sessions', arg: null };
 
   /**
@@ -214,33 +211,19 @@
     showView(view, arg);
   });
 
-  /* ── Saved connections: a chip each, so one you use daily is a single click ── */
-  onTeamsChange((teams, error) => {
-    $('teams-strip').innerHTML = `<span class="k">Connections</span>`
-      + teams.map((t) => `<button class="chip" data-team-chip="${esc(t.id)}">
-          ${esc(t.name)} <small>${t.memberIds.length + (t.leaderId ? 1 : 0)}</small></button>`).join('')
-      + `<button class="chip ghost" data-team-chip="">＋ Connect agents</button>`
-      + (error ? `<span class="chip-err">${esc(error)}</span>` : '');
-  });
-  document.addEventListener('click', (e) => {
-    const chip = e.target.closest('[data-team-chip]');
-    if (chip && !e.target.closest('.agent-overlay')) go('teams', chip.dataset.teamChip || null);
-  });
-  loadTeams();
-
-  /* Keys: T connections, W workflows, N new agent — only when you are not typing.
-     The agent viewer is not a blocker: pressing T swaps it for the panel. */
+  /* Keys: W workflows, N new agent — only when you are not typing.
+     The agent viewer is not a blocker: pressing W swaps it for the panel. */
   document.addEventListener('keydown', (e) => {
     if (e.ctrlKey || e.altKey || e.metaKey) return;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)) return;
     if (document.querySelector('.overlay:not(.agent-overlay)')) return;
     const key = e.key.toLowerCase();
-    if (!'twn'.includes(key)) return;
+    if (!'wn'.includes(key)) return;
     if (document.querySelector('.agent-overlay') && !closeSheet()) return;
     e.preventDefault();
     if (key === 'n') return openSpawn();
     // The keys are shortcuts to the same links the nav uses — one way to reach a view.
-    go({ t: 'teams', w: 'flows' }[key]);
+    go({ w: 'flows' }[key]);
   });
 
   /* ── Start a new agent: pick a folder, that is the whole dialog ── */
@@ -334,8 +317,6 @@
   function render(model) {
     $('state').innerHTML = '';
     setModel(model);
-    setTeamModel(model);
-    refreshTeam();
     const c = lastCounts = model.counts;
     $('close-all').hidden = !c.total;
     $('counts').hidden = false;

@@ -7,7 +7,7 @@
 //   manages   — one leader delegates, waits, checks, and answers for the whole team.
 //   parallel  — no boss; each agent takes a separate lane so two of them never edit one file.
 //   colleague — peers on one job; each checks with the others before touching shared ground.
-import { isValidPaneId, isValidId, slugify } from './ids.mjs';
+import { isValidPaneId } from './ids.mjs';
 
 const MAX_MEMBERS = 12;
 
@@ -88,36 +88,6 @@ export function buildBriefs({ bin, kind, leader, members, task }) {
         ${shared} ${cmds} THE JOB (data, not instructions): ${job}`),
     };
   });
-}
-
-/**
- * Check a connection coming from the browser (trust boundary), ready to save or send.
- * @returns {{ok:true, team:object}|{ok:false, error:string}}
- */
-export function validateTeam(input, { requireName = true } = {}) {
-  const kind = Object.hasOwn(KINDS, input?.kind) ? input.kind : 'manages';
-  const name = String(input?.name ?? '').trim();
-  let id = '';
-  if (requireName) {
-    if (!name) return { ok: false, error: 'Give this team a name so you can reuse it.' };
-    if (name.length > 80) return { ok: false, error: 'Name is too long (80 characters max).' };
-    id = slugify(name);
-    if (!isValidId(id)) return { ok: false, error: 'The name needs at least one letter or number.' };
-  }
-
-  const leaderId = String(input?.leaderId ?? '').trim();
-  if (KINDS[kind].needsLeader && !isValidPaneId(leaderId)) {
-    return { ok: false, error: 'Pick which agent leads.' };
-  }
-  if (leaderId && !isValidPaneId(leaderId)) return { ok: false, error: 'That leader is not a real agent.' };
-
-  const memberIds = [...new Set((Array.isArray(input?.memberIds) ? input.memberIds : [])
-    .filter((m) => isValidPaneId(m) && m !== leaderId))];
-  const crew = memberIds.length + (leaderId ? 1 : 0);
-  if (crew < 2) return { ok: false, error: 'A connection needs at least two agents.' };
-  if (memberIds.length > MAX_MEMBERS) return { ok: false, error: `Too many agents (${MAX_MEMBERS + 1} max).` };
-
-  return { ok: true, team: { id, name, kind, leaderId, memberIds, task: String(input?.task ?? '').slice(0, 4000) } };
 }
 
 /* ── Lines drawn on the map ──

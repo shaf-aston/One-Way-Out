@@ -14,7 +14,7 @@ node server.mjs        # http://localhost:4785, opens your browser
 node scripts/verify.mjs # the pure logic checks (npm run verify)
 ```
 
-## The flow, in eight steps
+## The flow, in seven steps
 
 1. **Ask Herdr what exists** — `src/herdr.mjs` runs `herdr api snapshot`. It is the only file
    that talks to the Herdr CLI, so pointing this app at something else means editing one file.
@@ -52,13 +52,12 @@ node scripts/verify.mjs # the pure logic checks (npm run verify)
 6. **Draw the connections, on the map itself** — drag the dot on an agent card to another agent and a
    menu asks what the connection means right where you dropped it; a labelled arrow appears
    (`public/index.html`, the `#links` layer). `public/wires.js` holds the lines and nothing else —
-   there is no separate board, no canvas and no second place to draw. Once lines exist, one bar
-   appears above the map: type one job and every joined-up group gets it, each agent told its own
-   part (`/api/connections/dispatch` → `cleanWires` + `teamsFromWires` in `src/team.mjs`).
-7. **Connect agents in a list** — `public/team.js` picks a leader and teammates and a *kind*; `src/team.mjs`
-   (pure) turns that into the exact line each agent is told, including the herdr commands it needs
-   to reach the others. Saved connections live in `~/.claude/herdr-teams`.
-8. **Chain agents** — `public/flows.js` builds a workflow; `src/runner.mjs` walks it step by step
+   there is no separate board, no canvas and no second place to connect agents. Once lines exist,
+   one bar appears above the map: type one job and every joined-up group gets it, each agent told
+   its own part (`/api/connections/dispatch` → `cleanWires` + `teamsFromWires` in `src/team.mjs`).
+   Agents never message each other on their own — words move only when you draw a line and type a
+   job, reply in the viewer, or run a workflow; the 1.5s poll only reads.
+7. **Chain agents** — `public/flows.js` builds a workflow; `src/runner.mjs` walks it step by step
    (send → wait for idle → next), and reports honestly when an agent never looked busy.
 
 ## Words this code uses
@@ -70,7 +69,7 @@ node scripts/verify.mjs # the pure logic checks (npm run verify)
 | **workspace** | Herdr's top-level grouping, one per project on this machine |
 | **status** | working · blocked · done · idle · unknown, straight from Herdr |
 | **needs you** | agents that are blocked or finished — the only ones wanting attention |
-| **connection** | agents wired together: one leads · side by side · colleagues — the code and files call this a *team* (`src/team.mjs`, `/api/teams`) |
+| **connection** | agents wired together: one leads · side by side · colleagues — the code calls this a *team* (`src/team.mjs`, `/api/kinds`) |
 | **kind** | which of those three a connection is; it changes what each agent is told |
 | **brief** | the single line of text a connected agent receives |
 | **wire** | one line drawn between two agents on the map — it *is* a connection, so it carries a kind |

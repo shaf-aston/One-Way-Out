@@ -6,7 +6,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 import { buildModel, listAgents } from '../src/model.mjs';
 import { validateFlow } from '../src/flows.mjs';
 import { describe } from '../src/commands.mjs';
-import { buildBriefs, validateTeam, cleanWires, teamsFromWires, MAX_WIRES } from '../src/team.mjs';
+import { buildBriefs, cleanWires, teamsFromWires, MAX_WIRES } from '../src/team.mjs';
 import { slugify, isValidId } from '../src/ids.mjs';
 import { listProjects } from '../src/projects.mjs';
 import { clean } from '../public/ui.js';
@@ -151,28 +151,6 @@ for (const kind of ['parallel', 'colleague']) {
 }
 assert.ok(buildBriefs({ bin:'h', kind:'parallel', leader:null, members: CREW, task:'x' })[0].text.includes('claimed'),
   'side-by-side agents are told to claim files, which is the whole point of that mode');
-
-// ── Saved connections (trust boundary) ──
-const bad = [
-  [{ name:'', leaderId:'w1:p1', memberIds:['w1:p2'] }, 'a connection needs a name to be saved'],
-  [{ name:'T', leaderId:'', memberIds:['w1:p2','w1:p3'] }, '"one leads" needs a leader'],
-  [{ name:'T', leaderId:'w1:p1', memberIds:[] }, 'one agent alone is not a connection'],
-  [{ name:'T', leaderId:'../evil', memberIds:['w1:p2'] }, 'leader ids stay herdr-shaped'],
-  [{ name:'T', leaderId:'w1:p1', memberIds:['w1:p1'] }, 'the leader cannot also be its own teammate'],
-  [{ name:'T', kind:'parallel', leaderId:'', memberIds:['w1:p2'] }, 'side by side still needs two agents'],
-  [{ name:'T', leaderId:'w1:p1', memberIds:Array(13).fill(0).map((_, i) => `w1:p${i + 2}`) }, 'crew size is capped'],
-];
-for (const [input, why] of bad) assert.equal(validateTeam(input).ok, false, why);
-
-const team = validateTeam({ name:'Build Squad', leaderId:'w1:p1', memberIds:['w1:p2','w1:p2','w1:p3'], task:'ship it' });
-assert.equal(team.ok, true, team.error);
-assert.equal(team.team.id, 'build-squad');
-assert.equal(team.team.kind, 'manages', 'the kind defaults instead of trusting input');
-assert.deepEqual(team.team.memberIds, ['w1:p2','w1:p3'], 'the same agent ticked twice is one agent');
-assert.equal(validateTeam({ kind:'parallel', memberIds:['w1:p2','w1:p3'] }, { requireName:false }).ok, true,
-  'sending without saving needs no name');
-assert.equal(validateTeam({ name:'T', kind:'nonsense', leaderId:'w1:p1', memberIds:['w1:p2'] }).team.kind, 'manages',
-  'an unknown kind falls back to the safe one');
 
 // ── Reading an agent at browser width ──
 const messy = 'hello   \n────────────────────\n\n\n  indented line   \n';

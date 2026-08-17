@@ -49,9 +49,9 @@ export function groupCount() {
   return leaders.size + new Set(seen.values()).size;
 }
 
-/** The kinds come from the same place the Connections panel gets them. One source, not two. */
+/** The three meanings a line can have, served by the API so the words live in one file. */
 export async function loadKinds() {
-  const r = await get('/api/teams');
+  const r = await get('/api/kinds');
   if (r.ok) kinds = r.kinds ?? kinds;
   return kinds;
 }

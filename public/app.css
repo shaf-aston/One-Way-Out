@@ -233,7 +233,6 @@
   .agent-overlay.full .composer { position:sticky; z-index:2; background:var(--bg-2); }
   .agent-overlay.full .turns { top:0; padding:.4rem 0; }
   .agent-overlay.full .composer { bottom:0; padding:.5rem 0 0; }
-  .agent-overlay.full .teams-strip.in-sheet { display:none; }   /* not what you are here for */
 
   /* A view, not a popup. Connections and Workflows each own a URL, so they get the
      whole window under the header instead of floating on a dimmed copy of the map. The
@@ -255,7 +254,6 @@
   body.in-view main > * { grid-column:1; }
   body.in-view #view-slot { grid-column:2; grid-row:1 / -1; min-width:0; }
   body.in-view main > .counts,
-  body.in-view main > .teams-strip,
   body.in-view main > .wired,
   body.in-view main > .legend,
   body.in-view main > #state { display:none; }
@@ -540,9 +538,7 @@
   .flow-msg.bad { color:var(--blocked); }
   .run-line { font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
 
-  /* Saved teams, one click from the map */
-  .teams-strip { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; margin:-1rem 0 2rem; }
-  .teams-strip .k { font-size:.62rem; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); margin-right:.3rem; }
+  /* Chips: the small pill buttons (folders in the new-agent dialog, messages you sent) */
   .chip {
     font:inherit; font-size:.76rem; color:var(--ink); cursor:pointer;
     background:linear-gradient(180deg,var(--panel-2),var(--panel));
@@ -551,47 +547,12 @@
   }
   .chip:hover { border-color:var(--gold); color:var(--gold-bright); }
   .chip small { color:var(--faint); font-size:.66rem; }
-  .chip.ghost { border-style:dashed; color:var(--muted); }
-
-  .teams-strip.in-sheet { margin:0 0 .2rem; }
   .chip.on { border-color:rgba(224,173,70,.45); }
-  .chip.picked { border-color:var(--gold); background:rgba(198,168,110,.16); color:var(--gold-bright); }
-  .chip-err { font-size:.72rem; color:var(--blocked); }
-
-  /* Connections panel */
-  .team .team-list { flex:1; min-height:0; overflow:auto; display:flex; flex-direction:column; gap:.4rem; }
-  .team-gone, .read-error { margin:0; font-size:.74rem; color:var(--blocked); }
-  .kind-rule { font-size:.66rem; color:var(--faint); }
-  .team-sum { margin:0; font-size:.8rem; color:var(--gold-bright); line-height:1.5; }
-  .kind-pick { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:.5rem; }
-  .kind {
-    font:inherit; text-align:left; cursor:pointer; color:var(--ink);
-    background:var(--panel); border:1px solid var(--line-soft); border-radius:12px; padding:.6rem .75rem;
-    display:flex; flex-direction:column; gap:.25rem;
-  }
-  .kind:hover { border-color:var(--gold); }
-  .kind.on { border-color:var(--gold); background:rgba(198,168,110,.12); }
-  .kind-name { font-size:.86rem; color:var(--gold-bright); }
-  .kind-blurb { font-size:.72rem; color:var(--muted); line-height:1.45; }
-  .fld.inline { flex:1; min-width:140px; }
-  .sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
 
   /* New-agent dialog */
   .spawn-sheet { width:min(680px,94vw); }
   .folder-list { display:flex; flex-wrap:wrap; gap:.45rem; max-height:38vh; overflow:auto; }
   .flow-rail .tip { margin-top:auto; padding-top:.8rem; border-top:1px solid var(--line-soft); }
-  .team-list { display:flex; flex-direction:column; gap:.4rem; max-height:46vh; overflow:auto; }
-  .team-row {
-    display:flex; align-items:center; gap:.8rem; padding:.55rem .75rem;
-    border:1px solid var(--line-soft); border-radius:10px; background:var(--panel);
-  }
-  .team-row.lead { border-color:var(--gold); }
-  .team-row .crown { font-size:.95rem; padding:.1rem .35rem; }
-  .team-row.lead .crown { color:var(--gold-bright); border-color:var(--gold); }
-  .team-who { display:flex; flex-direction:column; gap:.1rem; flex:1; font-size:.9rem; }
-  .team-who small { font-size:.62rem; letter-spacing:.16em; text-transform:uppercase; color:var(--faint); }
-  .team-row .check { margin-left:auto; }
-
   .legend { display:flex; flex-wrap:wrap; align-items:center; gap:1.1rem; margin-top:2.4rem; padding-top:1.4rem; border-top:1px solid var(--line-soft); font-size:.68rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
   /* The only control here, and the only irreversible one on the page: it sits apart, at the
      far end, and says so in colour. */

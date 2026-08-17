@@ -215,7 +215,6 @@ export function openSheet(paneId, label, cwd) {
         <button class="btn" data-act="close">Close</button>
       </div>
     </div>
-    <div class="teams-strip in-sheet" id="sheet-teams" aria-label="Saved connections"></div>
     <p class="read-error" role="status" aria-live="polite" hidden></p>
     <div class="turns" aria-label="Jump to a message you sent"></div>
     <div class="screen"></div>
@@ -245,7 +244,6 @@ export function openSheet(paneId, label, cwd) {
   </div>`;
   document.body.appendChild(ov);
 
-  ov.querySelector('#sheet-teams').innerHTML = $('teams-strip').innerHTML;
   const box = ov.querySelector('textarea');
   const palette = attachPalette(box, () => cwd || null);
 
@@ -330,8 +328,6 @@ export function openSheet(paneId, label, cwd) {
 
   ov.addEventListener('click', (e) => {
     if (e.target === ov) return closeSheet();
-    const chip = e.target.closest('[data-team-chip]');
-    if (chip) { if (closeSheet()) go('teams', chip.dataset.teamChip || null); return; }
     const view = e.target.closest('[data-view]')?.dataset.view;
     if (view) { setView(view); markView(ov); paintScreen(); return; }
     const act = e.target.closest('[data-act]')?.dataset.act;
