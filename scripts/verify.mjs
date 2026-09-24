@@ -542,7 +542,7 @@ assert.equal(generatedLabel('', 'proj'), true, 'a blank space label is fair game
 assert.equal(generatedLabel('Workspace 3', 'proj'), true, 'Herdr\'s own default is fair game');
 assert.equal(generatedLabel('proj', 'proj'), true, 'the folder name is what this script itself put there');
 assert.equal(generatedLabel('proj (2)', 'proj'), true, 'so is the numbered form it adds');
-assert.equal(generatedLabel('logistics-T4 ui-flows', 'logistics-T4'), false,
+assert.equal(generatedLabel('project-a ui-flows', 'project-a'), false,
   'a name you typed that merely starts with the folder is still yours');
 assert.equal(generatedLabel('Quiz Word Banks', 'proj'), false);
 
@@ -865,7 +865,7 @@ assert.deepEqual(collapse(single.join('\n')), single, 'a single frame passes thr
    in the same object, one line below in small grey text. Where the name is only the program's
    banner, the two swap over. Nothing is invented — both strings came from the agent. */
 const banner = buildModel({
-  workspaces: [{ workspace_id: 'w1', label: 'logistics-T4', number: 1 }],
+  workspaces: [{ workspace_id: 'w1', label: 'project-a', number: 1 }],
   tabs: [{ tab_id: 'w1:t1', workspace_id: 'w1', label: '1', number: 1 }],
   panes: [
     { pane_id: 'w1:p1', tab_id: 'w1:t1', workspace_id: 'w1', agent: 'claude', agent_status: 'idle',
@@ -893,10 +893,10 @@ assert.equal(new Set(cards.slice(0, 3).map((c) => c.label)).size, 3,
 
 /* ── agents quietly sharing one working folder ── */
 /* ── agents quietly sharing one working folder ──
-   Measured 2026-09-01: four agents on this map had the same cwd (logistics-T4) and nothing said
+   Measured 2026-09-01: four agents on this map had the same cwd (project-a) and nothing said
    so, because cards are grouped by Herdr WINDOW and the four sat in four different boxes.
    Herdr spells one folder several ways, so the check has to survive that. */
-const T4 = 'C:\\Users\\Shaf\\Downloads\\logistics-T4';
+const T4 = 'C:\\Users\\Shaf\\Downloads\\project-a';
 const sharing = buildModel({
   workspaces: [{ workspace_id: 'w1', label: 'one' }, { workspace_id: 'w2', label: 'two' }],
   tabs: [{ tab_id: 'w1:t1', workspace_id: 'w1', label: '1' }, { tab_id: 'w2:t1', workspace_id: 'w2', label: '1' }],
@@ -912,7 +912,7 @@ const sharing = buildModel({
 });
 const shared = sharedFolders(sharing, 1);
 assert.equal(shared.length, 1, 'only the folder with more than one agent in it is reported');
-assert.equal(shared[0].folder, 'logistics-T4', 'named by the folder, not by the window');
+assert.equal(shared[0].folder, 'project-a', 'named by the folder, not by the window');
 assert.equal(shared[0].path, T4, 'and the whole path is kept, exactly as Herdr said it');
 assert.deepEqual(shared[0].agents.map((a) => a.label), ['routes', 'pricing', 'drivers'],
   'a different drive-letter case, a trailing slash and forward slashes are all one folder');
@@ -958,7 +958,7 @@ assert.equal(resolveTarget({ session:'sess-a' }, [], 1).ok, false, 'nobody runni
    fresh count before a single agent is shut down. */
 import { checkAgreedCount } from '../src/model.mjs';
 const closingUp = buildModel({
-  workspaces: [{ workspace_id: 'w1', label: 'logistics-T4', number: 1 }],
+  workspaces: [{ workspace_id: 'w1', label: 'project-a', number: 1 }],
   tabs: [{ tab_id: 'w1:t1', workspace_id: 'w1', label: '1', number: 1 }],
   panes: [
     { pane_id: 'w1:p1', tab_id: 'w1:t1', workspace_id: 'w1', agent: 'claude', agent_status: 'idle', label: 'one' },

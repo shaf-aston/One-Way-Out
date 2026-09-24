@@ -4,8 +4,8 @@
 
 ## Question
 
-Five agents are editing `C:\Users\Shaf\Downloads\logistics-T4` at once. Three more
-share `aRABIC GRAMMAR TOOL`, two share `vibe-code-projs`. **None of those three
+Five agents are editing `C:\Users\Shaf\Downloads\project-a` at once. Three more
+share `project-b`, two share `vibe-code-projs`. **None of those three
 folders is a git repository** — checked 2026-09-02; only `radio-dictate` is. So
 there is no history, no branches, and no undo: when two agents write the same file,
 one edit is gone.
