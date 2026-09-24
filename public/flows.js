@@ -1,0 +1,318 @@
+// Workflow manager: build a chain of agent steps, save it, run it, watch it run.
+// A step = one agent (existing or freshly spawned) + one message. Steps run in order.
+import { esc, get, post, autoGrow, attachPalette, agentsOf, theModel, confirmOnce, okToDiscard, onOverlayEscape } from './ui.js';
+import { go } from './router.js';
+
+let flows = [];        // saved workflows on disk
+let presets = [];      // ready-made ones shipped with the app, so this is never a blank page
+let draft = null;      // the workflow being edited
+let runs = [];
+let timer = null;
+let pollMs = 1500;
+
+export const setPoll = (ms) => { pollMs = ms; };
+
+const blankStep = () => ({ session: '', text: '', waitForIdle: true });
+const blankFlow = () => ({ name: '', steps: [blankStep()] });
+// A step remembers the conversation it was written for, never the pane. An agent that is moved
+// keeps its conversation and the pane it left is handed to somebody else, so the agent a step
+// means is looked up fresh every time — and a step whose agent has gone shows nothing at all,
+// rather than the stranger now sitting in its place.
+const agentNow = (step) => (step.session ? agentsOf(theModel()).find((a) => a.session === step.session) : null) ?? null;
+const cwdOf = (step) => step.spawn ? step.spawn.cwd : (agentNow(step)?.cwd ?? '');
+
+/* ── Rendering ── */
+
+function stepCard(step, i, runStep) {
+  const agents = agentsOf(theModel());
+  const spawning = !!step.spawn;
+  const state = runStep?.state;
+  return `<div class="step ${state ? `st-${state}` : ''}" data-i="${i}">
+    <div class="step-top">
+      <span class="step-n">${i + 1}</span>
+      <span class="step-state ${state ? `s-${state}` : ''}" ${state ? '' : 'hidden'}>${esc(runStep?.note || state || '')}</span>
+      <span class="step-tools">
+        <button class="icon" data-act="left" title="Move earlier" ${i === 0 ? 'disabled' : ''}>←</button>
+        <button class="icon" data-act="right" title="Move later">→</button>
+        <button class="icon" data-act="remove" title="Remove step">✕</button>
+      </span>
+    </div>
+
+    <label class="fld">
+      <span>Agent</span>
+      <select data-field="agent">
+        <option value="">— pick an agent —</option>
+        ${agents.map((a) => `<option value="${esc(a.id)}" ${!spawning && step.session && step.session === a.session ? 'selected' : ''}>${esc(a.label)} · ${esc(a.workspace)}</option>`).join('')}
+        <option value="__new" ${spawning ? 'selected' : ''}>＋ Start a new agent…</option>
+      </select>
+    </label>
+
+    ${spawning ? `
+      <div class="spawn">
+        <label class="fld"><span>Name</span><input data-field="spawn.label" value="${esc(step.spawn.label)}" placeholder="reviewer" /></label>
+        <label class="fld"><span>Command</span><input data-field="spawn.command" value="${esc(step.spawn.command)}" placeholder="claude" /></label>
+        <label class="fld"><span>Folder</span><input data-field="spawn.cwd" value="${esc(step.spawn.cwd)}" placeholder="C:\\Users\\…\\project" /></label>
+        <label class="fld"><span>Put it in</span>
+          <select data-field="spawn.workspaceId">
+            <option value="">a new pane beside the current one</option>
+            ${(theModel()?.workspaces ?? []).map((w) => `<option value="${esc(w.id)}" ${step.spawn.workspaceId === w.id ? 'selected' : ''}>${esc(w.label)}</option>`).join('')}
+          </select>
+        </label>
+      </div>` : ''}
+
+    <label class="fld grow">
+      <span>Message</span>
+      <textarea data-field="text" rows="2" maxlength="4000" placeholder="Type a message, or / for a command…">${esc(step.text)}</textarea>
+    </label>
+
+    <label class="check">
+      <input type="checkbox" data-field="waitForIdle" ${step.waitForIdle ? 'checked' : ''} />
+      Wait for it to finish first
+    </label>
+  </div>`;
+}
+
+let startedId = null;  // the run this page kicked off, so an unsaved draft still shows progress
+
+/** The run belonging to the workflow on screen, if there is one. */
+const liveRun = () => runs.find((r) => r.id === startedId) ?? runs.find((r) => r.flowId === draft?.id) ?? null;
+
+/** Progress only — never touches the fields, so it is safe to call while you type. */
+function paint() {
+  const sheet = document.querySelector('.flows');
+  if (!sheet || !draft) return;
+  const live = liveRun();
+  sheet.querySelector('.run-line').textContent = live ? `${live.name} · ${live.status}` : '';
+  sheet.querySelector('[data-act="stop"]').hidden = !(live && live.status === 'running');
+  for (const card of sheet.querySelectorAll('.step')) {
+    const rs = live?.steps?.[Number(card.dataset.i)];
+    card.className = `step${rs?.state ? ` st-${rs.state}` : ''}`;
+    const badge = card.querySelector('.step-state');
+    if (badge) {
+      badge.textContent = rs ? (rs.note || rs.state) : '';
+      badge.className = `step-state${rs?.state ? ` s-${rs.state}` : ''}`;
+      badge.hidden = !rs || rs.state === 'pending';
+    }
+  }
+}
+
+function render() {
+  const sheet = document.querySelector('.flows');
+  if (!sheet || !draft) return;
+  const live = liveRun();
+
+  sheet.querySelector('.flow-list').innerHTML =
+    (flows.length
+      ? `<p class="rail-k">Yours</p>` + flows.map((f) => `
+          <button class="flow-pick ${draft.id === f.id ? 'on' : ''}" data-flow="${esc(f.id)}">
+            <span>${esc(f.name)}</span><small>${f.steps.length} step${f.steps.length === 1 ? '' : 's'}</small>
+          </button>`).join('')
+      : '')
+    + `<p class="rail-k">Ready-made — click to load a copy</p>`
+    + presets.map((p, i) => `<button class="flow-pick preset" data-preset="${i}">
+        <span>${esc(p.name)}</span><small>${esc(p.why)}</small>
+      </button>`).join('');
+
+  sheet.querySelector('.flow-name').value = draft.name;
+  sheet.querySelector('.chain').innerHTML = draft.steps
+    .map((s, i) => stepCard(s, i, live?.steps?.[i]))
+    .join('<div class="link">→</div>')
+    + `<div class="link">→</div><button class="add-step" data-act="add">＋ Add step</button>`;
+
+  sheet.querySelector('[data-act="delete"]').hidden = !draft.id;
+  // A step with no agent chosen has nobody to message, so Run would do nothing while
+  // claiming otherwise. Say which step is missing instead of failing after the click.
+  // This also catches a step whose agent has since closed or was saved before the app started
+  // remembering conversations: the run would stop on it, so the button says so before the click.
+  const unset = draft.steps.findIndex((s) => !s.spawn && !agentNow(s));
+  const runBtn = sheet.querySelector('[data-act="run"]');
+  runBtn.disabled = unset !== -1;
+  runBtn.title = unset === -1 ? 'Run this workflow now' : `Step ${unset + 1} still needs an agent`;
+  paint();
+
+  for (const el of sheet.querySelectorAll('.chain textarea')) {
+    autoGrow(el, 160);
+    if (!el.dataset.wired) {
+      el.dataset.wired = '1';
+      attachPalette(el, () => cwdOf(draft.steps[Number(el.closest('.step').dataset.i)]));
+    }
+  }
+}
+
+/* ── Data ── */
+
+async function loadFlows() {
+  const r = await get('/api/flows');
+  flows = r.ok ? r.flows : flows;
+  presets = r.ok ? (r.presets ?? []) : presets;
+  return r.ok ? null : r.error;
+}
+
+async function pollRuns() {
+  const r = await get('/api/flows/runs');
+  runs = r.ok ? r.runs : [];
+  paint();
+}
+
+function toast(sheet, msg, bad = false) {
+  const el = sheet.querySelector('.flow-msg');
+  el.textContent = msg;
+  el.classList.toggle('bad', bad);
+}
+
+/* ── Open / close ── */
+
+/** Unsaved = typed into, and different from whatever is on disk under that id. */
+function dirty() {
+  if (!draft) return false;
+  const saved = flows.find((f) => f.id === draft.id);
+  const typed = draft.name.trim() || draft.steps.some((s) => s.text.trim());
+  return !!typed && JSON.stringify(saved ?? null) !== JSON.stringify(draft);
+}
+
+function closeFlows(force = false) {
+  if (!force && !okToDiscard(dirty(), 'this unsaved workflow')) return false;
+  clearInterval(timer);
+  timer = null;
+  document.querySelector('.flows-overlay')?.remove();
+  return true;
+}
+
+export async function openFlows() {
+  closeFlows(true);
+  draft = blankFlow();
+  await loadFlows();
+
+  const ov = document.createElement('div');
+  ov.className = 'overlay flows-overlay';
+  ov.innerHTML = `<div class="sheet flows">
+    <div class="sheet-head">
+      <h3 class="display">Workflows</h3>
+      <div class="actions">
+        <span class="run-line" role="status" aria-live="polite"></span>
+        <button class="btn" data-act="stop" hidden>Stop run</button>
+        <button class="btn" data-act="close">Close</button>
+      </div>
+    </div>
+    <p class="explainer">A workflow is a <b>relay</b>. Each box is one agent doing one thing;
+      when it finishes, the next box starts. You are handing over a message you would otherwise
+      type yourself — so if a step would confuse a person, it will confuse the agent.</p>
+    <div class="flows-body">
+      <aside class="flow-rail">
+        <button class="btn wide" data-act="new">＋ New workflow</button>
+        <div class="flow-list"></div>
+      </aside>
+      <section class="flow-edit">
+        <label class="fld"><span>Workflow name</span>
+          <input class="flow-name" maxlength="80" placeholder="Review then fix" />
+        </label>
+        <div class="chain"></div>
+        <div class="flow-foot">
+          <button class="btn primary" data-act="run">Run now</button>
+          <button class="btn" data-act="save">Save</button>
+          <button class="btn" data-act="delete" hidden>Delete</button>
+          <span class="flow-msg" role="status" aria-live="polite"></span>
+        </div>
+      </section>
+    </div>
+    <div class="hintline">Type “/” in any message box to see the commands and skills this machine
+      already has. Tick “wait” when the next agent needs the first one's answer; untick it to fire
+      them off together.</div>
+  </div>`;
+  document.body.appendChild(ov);
+
+  ov.addEventListener('click', async (e) => {
+    if (e.target === ov) return closeFlows();
+    const pick = e.target.closest('[data-flow]');
+    if (pick) {
+      if (!okToDiscard(dirty(), 'this unsaved workflow')) return;
+      draft = structuredClone(flows.find((f) => f.id === pick.dataset.flow)) || blankFlow();
+      // Saved before the app remembered which conversation a step meant. Rather than message
+      // whoever holds that pane now, the agent box comes up empty and Run stays off.
+      if (draft.steps.some((s) => !s.spawn && !s.session)) {
+        toast(ov, 'This one was saved before the app remembered which conversation each step meant. Pick each agent again, then Save.');
+      }
+      return render();
+    }
+    const preset = e.target.closest('[data-preset]');
+    if (preset) {
+      if (!okToDiscard(dirty(), 'this unsaved workflow')) return;
+      const p = presets[Number(preset.dataset.preset)];
+      // A copy, with the agents left blank — you choose who does each step.
+      draft = { name: p.name, steps: p.steps.map((s) => ({ session: '', text: s.text, waitForIdle: s.waitForIdle !== false })) };
+      toast(ov, 'Loaded a copy. Pick which agent does each step, then Run or Save.');
+      return render();
+    }
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    if (!act) return;
+    const i = Number(e.target.closest('.step')?.dataset.i ?? -1);
+
+    if (act === 'close') return closeFlows();
+    if (act === 'new') {
+      if (!okToDiscard(dirty(), 'this unsaved workflow')) return;
+      draft = blankFlow(); return render();
+    }
+    if (act === 'add') { draft.steps.push(blankStep()); return render(); }
+    if (act === 'remove' && draft.steps.length > 1) { draft.steps.splice(i, 1); return render(); }
+    if (act === 'left' && i > 0) { draft.steps.splice(i - 1, 0, draft.steps.splice(i, 1)[0]); return render(); }
+    if (act === 'right' && i < draft.steps.length - 1) { draft.steps.splice(i + 1, 0, draft.steps.splice(i, 1)[0]); return render(); }
+    if (act === 'save') {
+      const r = await post('/api/flows/save', draft);
+      if (!r.ok) return toast(ov, r.error, true);
+      draft = structuredClone(r.flow);
+      await loadFlows();
+      toast(ov, 'Saved.');
+      return render();
+    }
+    if (act === 'delete' && draft.id) {
+      if (!confirmOnce(`Delete the workflow “${draft.name}”?`)) return;
+      const r = await post('/api/flows/delete', { id: draft.id });
+      if (!r.ok) return toast(ov, r.error, true);
+      draft = blankFlow();
+      await loadFlows();
+      toast(ov, 'Deleted.');
+      return render();
+    }
+    if (act === 'run') {
+      const named = draft.steps.map((s, n) => `${n + 1}. ${s.spawn ? `new agent “${s.spawn.label}”` : (agentNow(s)?.label ?? 'an agent')}`).join('\n');
+      if (!confirmOnce(`Run “${draft.name || 'this workflow'}” now?\n\nIt will message these agents in order:\n${named}`)) return;
+      const r = await post('/api/flows/run', draft);
+      if (!r.ok) return toast(ov, r.error, true);
+      startedId = r.run.id;
+      // A running workflow is watched where the agents are. Staying on this page to read
+      // "Running…" is a dead end, so pressing Run takes you back to the map.
+      closeFlows(true);
+      go('sessions');
+      return;
+    }
+    if (act === 'stop') {
+      const live = liveRun();
+      if (live) await post('/api/flows/stop', { id: live.id });
+      return pollRuns();
+    }
+  });
+
+  ov.addEventListener('input', (e) => {
+    const el = e.target;
+    if (el.classList.contains('flow-name')) { draft.name = el.value; return; }
+    const {field} = el.dataset;
+    if (!field) return;
+    const step = draft.steps[Number(el.closest('.step').dataset.i)];
+    if (field === 'agent') {
+      if (el.value === '__new') { delete step.session; step.spawn = { label:'agent', command:'claude', cwd:'', workspaceId:'', split:'right' }; }
+      // Picked from the panes on screen; what is kept is the conversation inside that pane.
+      else { delete step.spawn; step.session = agentsOf(theModel()).find((a) => a.id === el.value)?.session ?? ''; }
+      return render();
+    }
+    if (field === 'waitForIdle') { step.waitForIdle = el.checked; return; }
+    if (field.startsWith('spawn.')) { step.spawn[field.slice(6)] = el.value; return; }
+    step[field] = el.value;
+    if (el.tagName === 'TEXTAREA') autoGrow(el, 160);
+  });
+
+  render();
+  await pollRuns();
+  timer = setInterval(pollRuns, pollMs);
+}
+
+onOverlayEscape('.flows-overlay', closeFlows);

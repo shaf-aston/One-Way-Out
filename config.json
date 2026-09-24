@@ -1,0 +1,112 @@
+{
+  "port": 4785,
+  "pollIntervalMs": 1500,
+  "maxAgentsPerFolder": 1,
+  "herdrBin": "",
+  "herdrConfigPath": "C:/Users/Shaf/AppData/Roaming/herdr/config.toml",
+  "openBrowser": true,
+  "flowsDir": "C:/Users/Shaf/.claude/herdr/flows",
+  "shotsDir": "C:/Users/Shaf/.claude/herdr/shots",
+  "wiresDir": "C:/Users/Shaf/.claude/herdr/wires",
+  "runsDir": "C:/Users/Shaf/.claude/herdr/runs",
+  "projectRoots": [
+    "C:\\Users\\Shaf\\Downloads\\vibe-code-projs",
+    "C:\\Users\\Shaf\\Downloads\\logistics-T4"
+  ],
+  "defaultAgentCommand": "claude",
+  "workflow": {
+    "stepTimeoutMs": 900000,
+    "settleMs": 6000,
+    "spawnReadyMs": 30000,
+    "maxConcurrent": 3
+  },
+  "run": {
+    "maxAgents": 8,
+    "maxDepth": 3,
+    "plannerRetries": 1,
+    "taskRetries": 1,
+    "taskTimeoutMs": 1800000,
+    "runTimeoutMs": 10800000
+  },
+  "prompts": {
+    "scanIntervalMs": 5000,
+    "maxScan": 24,
+    "skipStatuses": [
+      "working"
+    ],
+    "known": [
+      {
+        "id": "resume-session",
+        "title": "Resuming a long session",
+        "match": "Resuming the full session will consume",
+        "choices": [
+          {
+            "id": "summary",
+            "label": "Resume from summary",
+            "match": "^Resume from summary"
+          },
+          {
+            "id": "full",
+            "label": "Resume full session as-is",
+            "match": "^Resume (the )?full session"
+          }
+        ]
+      },
+      {
+        "id": "trust-folder",
+        "title": "A new agent asking whether it may work in its folder",
+        "match": "Is this a project you created or one you trust",
+        "choices": [
+          {
+            "id": "trust",
+            "label": "Yes, work in this folder",
+            "match": "^Yes, I trust this folder"
+          }
+        ]
+      }
+    ],
+    "settleMs": 350
+  },
+  "states": [
+    {
+      "id": "needs-you",
+      "label": "Needs you",
+      "blurb": "Stopped on a question and waiting for an answer.",
+      "tone": "blocked",
+      "match": {
+        "status": "blocked"
+      }
+    },
+    {
+      "id": "your-turn",
+      "label": "Your turn",
+      "blurb": "Finished what it was doing. Waiting for what is next.",
+      "tone": "done",
+      "match": {
+        "status": "done"
+      }
+    },
+    {
+      "id": "working",
+      "label": "Working",
+      "blurb": "Busy right now. Nothing for you to do.",
+      "tone": "working",
+      "match": {
+        "status": "working"
+      }
+    },
+    {
+      "id": "quiet",
+      "label": "Quiet",
+      "blurb": "Running, with nothing to report.",
+      "tone": "idle",
+      "cardsPerLane": 6,
+      "match": {}
+    }
+  ],
+  "board": {
+    "cardsPerLane": 3,
+    "maxLanes": 3,
+    "minLaneWidthPx": 240
+  }
+}

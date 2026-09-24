@@ -1,0 +1,20 @@
+# Secrets never enter history. This file exists before the first commit for that reason.
+.env
+.env.*
+*.pem
+*.key
+
+# Dependencies and build output
+node_modules/
+dist/
+build/
+
+# Machine noise
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+
+# What the app writes at runtime lives in ~/.claude, not here — but if a config
+# override ever lands beside the app, it is a local choice, not the project's.
+config.local.json
