@@ -32,7 +32,7 @@ export function readSettings(text) {
   for (const line of text.split(/\r?\n/)) {
     const head = line.match(/^\s*\[([^\]]+)\]\s*$/);
     if (head) { section = head[1].trim(); continue; }
-    const kv = line.match(/^\s*([A-Za-z_]+)\s*=\s*(.+?)\s*(#.*)?$/);
+    const kv = line.match(/^\s*([A-Za-z_]+)\s*=\s*("[^"]*"|[^\s#]+)/);
     const s = kv && byKey(section, kv[1]);
     if (!s) continue;
     const raw = kv[2];

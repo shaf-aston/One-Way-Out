@@ -1,5 +1,3 @@
-Follows `~/.claude/CLAUDE.md` — global brief + Development Lifecycle.
-
 # One-Way-Out — project specifics
 
 ## Stack
@@ -26,19 +24,19 @@ npm run verify     # node scripts/verify.mjs — the pure-logic checks, no serve
 Two kinds, both required for anything non-trivial:
 1. `npm run verify` for pure logic — add a case there, never a new test suite.
 2. **Playwright against the running app** for anything visible. A UI change is
-   not done until it has been driven in a browser. Playwright is global at
-   `C:/Users/Shaf/AppData/Roaming/npm/node_modules/playwright/index.mjs`.
+   not done until it has been driven in a browser. Playwright is expected in
+   your global `node_modules` (`npm i -g playwright`).
 
 ## Never do these
 - **Never send to, key, or close a real agent from a test.** `/api/pane/send`,
   `/api/pane/keys`, `/api/agents/close-all`, `/api/prompts/answer`,
   `/api/connections/dispatch`, `/api/flows/run` and `/api/run/approve` all reach
-  Shaf's live sessions. Test scripts should add a `page.on('request')` guard that
+  your live sessions. Test scripts should add a `page.on('request')` guard that
   fails loudly if one is called — matching the **exact path**, because
   `/api/flows/runs` only lists runs and a prefix match blocks a harmless read.
 - **`POST /api/terminal/settings` rewrites Herdr's real `config.toml`** (path: `herdrConfigPath` in config.json). Tests point it at a scratch copy and checksum the real file before and after.
 - **A POST is a write even when it looks harmless.** `POST /api/wires` overwrites
-  the connections he has drawn; `/api/flows/save` overwrites a workflow. A test
+  the connections you have drawn; `/api/flows/save` overwrites a workflow. A test
   may read one and post it back unchanged; it may never post a value it invented.
 - **No paid API keys, ever.** This app calls nothing but the local Herdr CLI.
 - Never weaken the image check in `src/image.mjs` — it decides what gets written

@@ -2,7 +2,7 @@
 
 > Written after the fact, from the code and from how it is actually used. The
 > success criteria below are what the app already does; anything marked
-> **[assumed]** is my reading, not something Shaf stated — correct it freely.
+> **[assumed]** is my reading, not something the author stated — correct it freely.
 
 ## Purpose
 One page that shows every AI agent running on this machine and lets you work all
@@ -10,7 +10,7 @@ of them from there — read one, answer one, connect several, hand them a job, o
 turn one goal into a whole team that plans itself, reports back, and can be
 picked up again after a restart — without touching the terminal.
 
-**Who it is for:** one person (Shaf) running several coding agents at once on one
+**Who it is for:** one person running several coding agents at once on one
 Windows machine, on a second screen, glanced at constantly. Not multi-user, not
 hosted, not shared. **[assumed]**
 

@@ -3,15 +3,9 @@
   "pollIntervalMs": 1500,
   "maxAgentsPerFolder": 1,
   "herdrBin": "",
-  "herdrConfigPath": "C:/Users/Shaf/AppData/Roaming/herdr/config.toml",
+  "herdrConfigPath": "",
   "openBrowser": true,
-  "flowsDir": "C:/Users/Shaf/.claude/herdr/flows",
-  "shotsDir": "C:/Users/Shaf/.claude/herdr/shots",
-  "wiresDir": "C:/Users/Shaf/.claude/herdr/wires",
-  "runsDir": "C:/Users/Shaf/.claude/herdr/runs",
-  "projectRoots": [
-    "C:\\Users\\Shaf\\Downloads\\vibe-code-projs"
-  ],
+  "projectRoots": [],
   "defaultAgentCommand": "claude",
   "workflow": {
     "stepTimeoutMs": 900000,
