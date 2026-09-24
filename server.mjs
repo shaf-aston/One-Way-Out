@@ -184,8 +184,9 @@ const server = http.createServer(async (req, res) => {
   // Herdr's own look-and-feel settings. Only the allow-listed keys in herdrsettings.mjs can change;
   // the first write of each day keeps a .bak copy of the file as it was.
   if (url.pathname === '/api/terminal/settings') {
-    const file = config.herdrConfigPath;
-    if (!file) return fail(res, 'herdrConfigPath is not set in config.json');
+    const file = config.herdrConfigPath || (process.platform === 'win32'
+      ? path.join(process.env.APPDATA ?? '', 'herdr', 'config.toml')
+      : path.join(os.homedir(), '.config', 'herdr', 'config.toml'));
     const text = existsSync(file) ? await readFile(file, 'utf8') : '';
     if (!post) return ok(res, { settings: SETTINGS, values: readSettings(text) });
     const body = await jsonBody(req);
@@ -333,7 +334,7 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/projects') {
     const snap = await getSnapshot(herdrBin);
     const inUse = snap.ok ? listAgents(buildModel(snap.snapshot)).map((a) => a.cwd) : [];
-    return ok(res, { projects: await listProjects(config.projectRoots ?? [], inUse) });
+    return ok(res, { projects: await listProjects(config.projectRoots?.length ? config.projectRoots : [os.homedir()], inUse) });
   }
 
   // Start a new agent in a folder: {cwd, label?, command?, dest?}.

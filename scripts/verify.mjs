@@ -29,9 +29,9 @@ import { parseHash, linkTo } from '../public/router.js';
 // 1) Real empty snapshot shape captured from `herdr api snapshot` (one shell pane, no agents).
 const real = {
   focused_pane_id: 'w1:p1', focused_tab_id: 'w1:t1', focused_workspace_id: 'w1',
-  workspaces: [{ workspace_id: 'w1', label: 'Shaf', number: 1, focused: true, active_tab_id: 'w1:t1', agent_status: 'unknown', pane_count: 1, tab_count: 1 }],
+  workspaces: [{ workspace_id: 'w1', label: 'alex', number: 1, focused: true, active_tab_id: 'w1:t1', agent_status: 'unknown', pane_count: 1, tab_count: 1 }],
   tabs: [{ tab_id: 'w1:t1', workspace_id: 'w1', label: '1', number: 1, focused: true, agent_status: 'unknown', pane_count: 1 }],
-  panes: [{ pane_id: 'w1:p1', tab_id: 'w1:t1', workspace_id: 'w1', agent_status: 'unknown', cwd: 'C:\\Users\\Shaf', focused: true, terminal_title_stripped: 'powershell.exe' }],
+  panes: [{ pane_id: 'w1:p1', tab_id: 'w1:t1', workspace_id: 'w1', agent_status: 'unknown', cwd: 'C:\\Users\\alex', focused: true, terminal_title_stripped: 'powershell.exe' }],
   agents: [],
 };
 const m1 = buildModel(real);
@@ -774,14 +774,14 @@ const collapse = (text) => rows(collapseRepaints(parseAnsi(text)));
 // One frame drawn three times, with a row that only the middle frame ever showed.
 const threeFrames = [
   '· Channeling… (20m 33s · ↓ 32.1k tokens)',
-  '  ⎿   ◻ 7.3 The one press only Shaf can make',
+  '  ⎿   ◻ 7.3 The one press only you can make',
   '',
   '· Channeling… (21m 0s · ↓ 32.1k tokens)',
-  '  ⎿   ◻ 7.3 The one press only Shaf can make',
+  '  ⎿   ◻ 7.3 The one press only you can make',
   '  ⎿  Allowed by auto mode classifier',
   '',
   '· Channeling… (21m 7s · ↓ 32.1k tokens)',
-  '  ⎿   ◻ 7.3 The one press only Shaf can make',
+  '  ⎿   ◻ 7.3 The one press only you can make',
 ].join('\n');
 
 const three = collapse(threeFrames);
@@ -798,12 +798,12 @@ const tight = collapse([
   "● Bash(python - <<'PY')",
   '  ⎿  Running…',
   '· Channeling… (1m 0s · ↓ 32.1k tokens)',
-  '  ⎿   ◻ 7.3 The one press only Shaf can make',
+  '  ⎿   ◻ 7.3 The one press only you can make',
   '· Channeling… (1m 7s · ↓ 32.1k tokens)',
-  '  ⎿   ◻ 7.3 The one press only Shaf can make',
+  '  ⎿   ◻ 7.3 The one press only you can make',
   '  ⎿  UNIQUE EVIDENCE ONLY IN FRAME 2',
   '· Channeling… (1m 9s · ↓ 32.1k tokens)',
-  '  ⎿   ◻ 7.3 The one press only Shaf can make',
+  '  ⎿   ◻ 7.3 The one press only you can make',
 ].join('\n'));
 assert.ok(tight.some((s) => /UNIQUE EVIDENCE ONLY IN FRAME 2/.test(s)),
   'a run with no blank line before it still keeps every row it drew');
@@ -896,7 +896,7 @@ assert.equal(new Set(cards.slice(0, 3).map((c) => c.label)).size, 3,
    Measured 2026-09-01: four agents on this map had the same cwd (project-a) and nothing said
    so, because cards are grouped by Herdr WINDOW and the four sat in four different boxes.
    Herdr spells one folder several ways, so the check has to survive that. */
-const T4 = 'C:\\Users\\Shaf\\Downloads\\project-a';
+const T4 = 'C:\\Users\\alex\\Downloads\\project-a';
 const sharing = buildModel({
   workspaces: [{ workspace_id: 'w1', label: 'one' }, { workspace_id: 'w2', label: 'two' }],
   tabs: [{ tab_id: 'w1:t1', workspace_id: 'w1', label: '1' }, { tab_id: 'w2:t1', workspace_id: 'w2', label: '1' }],
@@ -904,7 +904,7 @@ const sharing = buildModel({
     { pane_id: 'w1:p1', tab_id: 'w1:t1', workspace_id: 'w1', agent: 'claude', agent_status: 'idle', label: 'routes', cwd: T4 },
     { pane_id: 'w1:p2', tab_id: 'w1:t1', workspace_id: 'w1', agent: 'claude', agent_status: 'working', label: 'pricing', cwd: T4.toLowerCase() + '\\' },
     { pane_id: 'w2:p1', tab_id: 'w2:t1', workspace_id: 'w2', agent: 'claude', agent_status: 'idle', label: 'drivers', cwd: T4.replace(/\\/g, '/') },
-    { pane_id: 'w2:p2', tab_id: 'w2:t1', workspace_id: 'w2', agent: 'claude', agent_status: 'idle', label: 'alone', cwd: 'C:\\Users\\Shaf\\Downloads\\vibe-code-projs' },
+    { pane_id: 'w2:p2', tab_id: 'w2:t1', workspace_id: 'w2', agent: 'claude', agent_status: 'idle', label: 'alone', cwd: 'C:\\Users\\alex\\Downloads\\my-projects' },
     { pane_id: 'w2:p3', tab_id: 'w2:t1', workspace_id: 'w2', label: 'powershell', cwd: T4 },
     { pane_id: 'w2:p4', tab_id: 'w2:t1', workspace_id: 'w2', agent: 'claude', agent_status: 'idle', label: 'homeless', cwd: null },
   ],
@@ -1107,5 +1107,7 @@ assert.throws(() => patchSettings(toml, { 'ui.accent': 'red; rm' }), /rrggbb/, '
 assert.throws(() => patchSettings(toml, { 'theme.name': 'neon' }), /one of/, 'an unknown theme is refused');
 assert.throws(() => patchSettings(toml, { 'ui.confirm_close': 'yes' }), /true or false/, 'a bool must be a bool');
 assert.equal(patchSettings('[ui]\r\nconfirm_close = true\r\n', { 'ui.confirm_close': false }), '[ui]\r\nconfirm_close = false\r\n', 'keeps Windows line endings');
+assert.equal(readSettings('[ui]\naccent = "#c6a86e"  # gold\n')['ui.accent'], '#c6a86e', 'a colour keeps its # and a trailing comment is ignored');
+assert.equal(readSettings('[ui]\nconfirm_close = false # off\n')['ui.confirm_close'], false, 'a comment after a bool is ignored');
 
 console.log('OK — model, roster, connections, briefs, folders, labels, screen text, commands, workflows, plans, shared prompts, shared folders, menus, board columns and live repaints all pass.');
