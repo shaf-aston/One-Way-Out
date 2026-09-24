@@ -158,7 +158,7 @@
 
 ● Now the out-of-sight run's two honesty problems.
 
-● Bash(cd /c/Users/Shaf/Downloads/logistics-T4/crm-extract && grep -rn "attempts to change something
+● Bash(cd /c/Users/Shaf/Downloads/project-a/project-a-extract && grep -rn "attempts to change something
       were stopped\|ALARM" src/ --include=*.ts | head)
   ⎿  (No output)
 
@@ -225,7 +225,7 @@
 ● Bash(python - <<'PY'
       import io…)
   ⎿  ok
-     > crm-extract@0.1.0 typecheck
+     > project-a-extract@0.1.0 typecheck
      > tsc --noEmit && npm run check:agnostic
      … +6 lines (ctrl+o to expand)
   ⎿  (timeout 5m)
@@ -247,7 +247,7 @@
       import io…)
   ⎿  ok
 
-     > crm-extract@0.1.0 check:background
+     > project-a-extract@0.1.0 check:background
      … +5 lines (ctrl+o to expand)
   ⎿  (timeout 7m)
   ⎿  Allowed by auto mode classifier
@@ -398,7 +398,7 @@
   ⎿  Running in the background (↓ to manage)
   ⎿  Allowed by auto mode classifier
 
-● Bash(cd /c/Users/Shaf/Downloads/logistics-T4/logi-master && npx vitest run src/lib/migration
+● Bash(cd /c/Users/Shaf/Downloads/project-a/project-a-main && npx vitest run src/lib/migration
       --reporter=basic 2>&1 | tail -5 && node scripts/data-migration-test.mjs…)
   ⎿  Waiting…
   ⎿    }
@@ -414,7 +414,7 @@
   Phone
   056 114 8449
   Email
-  shamefathi@gmail.com
+  user@example.com
   Created (+04)
   Aug 29, 2026 06:23 AM
   Last activity (+04)
@@ -435,7 +435,7 @@
 
   Searched for 2 patterns (ctrl+o to expand)
 
-● Bash(cd /c/Users/Shaf/Downloads/logistics-T4/crm-extract && grep -n "list(" -A 25
+● Bash(cd /c/Users/Shaf/Downloads/project-a/project-a-extract && grep -n "list(" -A 25
       src/panel/operations.ts | grep -n "headline\|fields\|rows\|summar" | head)
   ⎿  (No output)
 

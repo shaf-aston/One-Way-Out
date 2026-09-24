@@ -468,7 +468,7 @@
     $('counts').innerHTML = `<b>${c.total} agent${c.total === 1 ? '' : 's'}</b>`
      + board.filter((s) => s.ids.length)
         .map((s) => `<span><i class="swatch" style="background:var(--${esc(s.tone)})"></i>${s.ids.length} ${esc(s.label)}</span>`).join('')
-     // Measured 2026-09-01: four agents had the same folder (logistics-T4) and the map showed
+     // Measured 2026-09-01: four agents had the same folder (project-a) and the map showed
      // it nowhere, because cards are grouped by Herdr window and the four sat in four boxes.
      // It is a standing condition, not an event, and the cards already carry the ⚠ — so it is
      // a chip on this line rather than a band of its own, with the sentence in its tooltip.
@@ -504,7 +504,7 @@
     //
     // This replaced one box per Herdr *window* — a grouping that came from the accident of how
     // the terminals were opened. Measured 2026-09-02: one folder was drawn as five boxes named
-    // "logistics-T4 Qs", "logistics-T4 (3)", "featsLogi-Add" and so on, and the agents actually
+    // "project-a Qs", "project-a (3)", "featsLogi-Add" and so on, and the agents actually
     // waiting for an answer were scattered across all five.
     const paneById = new Map(model.workspaces.flatMap((w) =>
       w.tabs.flatMap((t) => t.panes.map((p) => [p.id, p]))));

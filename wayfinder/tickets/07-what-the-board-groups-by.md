@@ -7,7 +7,7 @@
 Three candidates, and the decision is which is the default — `config.json` should
 carry all three, so this is about what opens, not what is possible.
 
-- **By Herdr window** — today. `logistics-T4` is five boxes named after windows you
+- **By Herdr window** — today. `project-a` is five boxes named after windows you
   opened by accident.
 - **By folder** — one heading per project, three headings for twelve agents.
   Nothing new is invented; the folder is already on every card.

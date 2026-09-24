@@ -199,7 +199,7 @@
   /* The name is the only thing saying WHICH workspace this is, and the button beside it ends
      live sessions — so the name is never the part that gets shortened. Measured 2026-09-01: in
      a 330px grid cell the name was left 109px, about ten letters, while "Close 3" kept every
-     character, so two projects both read "logistics…" beside a fully legible way to kill them.
+     character, so two projects both read "project-a…" beside a fully legible way to kill them.
      The name now runs onto a second line instead; if even 6rem will not fit, the count and the
      button drop below it rather than the name losing letters. */
   .ws-head h3 { font-family:'Cormorant Garamond',Georgia,serif; font-weight:500; font-size:1.25rem; margin:0; letter-spacing:.03em;

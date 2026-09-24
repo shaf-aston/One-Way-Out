@@ -1,6 +1,6 @@
  ▐▛███▛█   Claude Code v2.1.252
 ▝▜██████▀  Opus 5 with medium effort · Claude Max
-  ▝▝ ▝▝    ~\AppData\Local\Temp\herdr-map-scratch\agent-YVCDdE
+  ▝▝ ▝▝    ~\AppData\Local\Temp\one-way-out-scratch\agent-YVCDdE
 
 ⚠ 1 MCP server needs authentication · run /mcp
 

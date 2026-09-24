@@ -10,8 +10,7 @@
   "wiresDir": "C:/Users/Shaf/.claude/herdr/wires",
   "runsDir": "C:/Users/Shaf/.claude/herdr/runs",
   "projectRoots": [
-    "C:\\Users\\Shaf\\Downloads\\vibe-code-projs",
-    "C:\\Users\\Shaf\\Downloads\\logistics-T4"
+    "C:\\Users\\Shaf\\Downloads\\vibe-code-projs"
   ],
   "defaultAgentCommand": "claude",
   "workflow": {

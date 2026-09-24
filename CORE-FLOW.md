@@ -41,7 +41,7 @@ node scripts/orch.mjs resume <id>     # pick a run back up after a restart
    agents by the folder they work in and reports every folder holding more than
    `maxAgentsPerFolder` of them. They share one working tree with no undo, and the map groups
    cards by Herdr *window*, so until this they sat in separate boxes with nothing saying so
-   (measured 2026-09-01: five agents in `logistics-T4`). It reports; it never moves anything.
+   (measured 2026-09-01: five agents in `project-a`). It reports; it never moves anything.
    **Which column a card is in is worked out, never stored.** `src/state.mjs` (pure) walks the
    ordered `states` list in `config.json` and takes the first whose facts all hold, so the board
    is a view of what Herdr reports and cannot disagree with it. The order IS the rule: measured
