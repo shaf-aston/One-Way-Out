@@ -43,7 +43,7 @@ function result(raw, whatFailed) {
  */
 export async function getSnapshot(bin) {
   try {
-    const snapshot = result(await run(bin, ['api', 'snapshot']), 'Herdr returned an error').snapshot;
+    const {snapshot} = result(await run(bin, ['api', 'snapshot']), 'Herdr returned an error');
     if (!snapshot) return { ok: false, error: 'Herdr returned an unexpected response shape' };
     return { ok: true, snapshot };
   } catch (e) {
@@ -76,6 +76,26 @@ export async function runInPane(bin, paneId, text) {
   result(await run(bin, ['pane', 'run', paneId, text]), 'Herdr send failed');
 }
 
+/** Tell the running Herdr to re-read config.toml. Returns Herdr's own diagnostics. */
+export async function reloadConfig(bin) {
+  return result(await run(bin, ['server', 'reload-config']), 'Herdr reload failed');
+}
+
+/** Set a tab's label - Herdr draws it faint after the space name in the agents panel. */
+export async function renameTab(bin, tabId, label) {
+  result(await run(bin, ['tab', 'rename', tabId, label]), 'Herdr tab rename failed');
+}
+
+/** Set an agent's name - the faint line the agents panel draws under its space. */
+export async function renameAgent(bin, target, name) {
+  result(await run(bin, ['agent', 'rename', target, name]), 'Herdr agent rename failed');
+}
+
+/** Set a space's label - the one line Herdr draws for it in the sidebar. */
+export async function renameWorkspace(bin, workspaceId, label) {
+  result(await run(bin, ['workspace', 'rename', workspaceId, label]), 'Herdr rename failed');
+}
+
 /**
  * The only keys the viewer may press in a pane, and what each one means to Claude Code.
  * A fixed list, not free text — pressing keys in a live terminal is exactly the kind of
@@ -95,6 +115,15 @@ export async function sendKeys(bin, paneId, key) {
   result(await run(bin, ['pane', 'send-keys', paneId, key]), 'Herdr key press failed');
 }
 
+/**
+ * Move a pane somewhere else — the same agent, re-parented, keeping its terminal and its
+ * conversation. `args` comes from moveArgs() in src/moves.mjs; nothing is built here.
+ * @returns {Promise<object>} Herdr's own move_result: which tab it made, which it closed.
+ */
+export async function movePane(bin, args) {
+  return result(await run(bin, args), 'Herdr could not move that agent').move_result ?? {};
+}
+
 /** Close a pane — this is how an agent is shut down; Herdr has no separate "kill agent". */
 export async function closePane(bin, paneId) {
   result(await run(bin, ['pane', 'close', paneId]), 'Herdr could not close that pane');
@@ -102,20 +131,22 @@ export async function closePane(bin, paneId) {
 
 /** Live state of one agent: {agent_status, cwd, pane_id, ...}. */
 export async function getAgent(bin, target) {
-  const agent = result(await run(bin, ['agent', 'get', target]), 'Herdr could not read that agent').agent;
+  const {agent} = result(await run(bin, ['agent', 'get', target]), 'Herdr could not read that agent');
   if (!agent) throw new Error('Herdr returned an unexpected agent shape');
   return agent;
 }
 
 /**
  * Start a new agent process in its own pane.
- * @param {{label:string, cwd?:string, workspaceId?:string, split?:string, argv:string[]}} spec
+ * @param {{label:string, cwd?:string, workspaceId?:string, tabId?:string, split?:string,
+ *   argv:string[]}} spec — where it lands is decided by startPlan() in src/moves.mjs.
  * @returns {Promise<string>} the new pane id.
  */
 export async function startAgent(bin, spec) {
   const args = ['agent', 'start', spec.label];
   if (spec.cwd) args.push('--cwd', spec.cwd);
   if (spec.workspaceId) args.push('--workspace', spec.workspaceId);
+  if (spec.tabId) args.push('--tab', spec.tabId);
   if (spec.split) args.push('--split', spec.split);
   args.push('--no-focus', '--', ...spec.argv);
   const raw = await run(bin, args, 20000);

@@ -4,8 +4,9 @@
 // leaves no history entry. Everything it shows comes from the agent itself (reader.js turns
 // the terminal's own colours into HTML); nothing here invents text.
 import { $, esc, get, post, autoGrow, attachPalette, clean, confirmOnce } from './ui.js';
-import { parseAnsi, toLog, toTerminal, chooseKeys, readMode, MODES } from './reader.js';
+import { parseAnsi, toLog, toTerminal, readMode, MODES } from './reader.js';
 import { isWiring, finishFromKeyboard } from './connect.js';
+import { bindKey } from './keys.js';
 import { go } from './router.js';
 
 // How often the open screen re-reads, handed in so this module does not fetch config itself.
@@ -19,7 +20,7 @@ let historyAt = 0;
 
 /* Focused mode: the viewer takes the whole window instead of floating on the map. Remembered
    on this machine, so once you prefer it you get it every time you open an agent. */
-const FULL_KEY = 'herdr-map.screen-full';
+const FULL_KEY = 'one-way-out.screen-full';
 const getFull = () => { try { return localStorage.getItem(FULL_KEY) === 'on'; } catch { return false; } };
 const setFull = (on) => { try { localStorage.setItem(FULL_KEY, on ? 'on' : 'off'); } catch { /* private mode */ } };
 
@@ -48,7 +49,7 @@ function fitSheet(el, text) {
 
 /* Which view the agent screen opens in. Remembered on this machine, so the choice is made
    once; falls back to the reader when storage is unavailable. */
-const VIEW_KEY = 'herdr-map.screen-view';
+const VIEW_KEY = 'one-way-out.screen-view';
 const getView = () => { try { return localStorage.getItem(VIEW_KEY) || 'reader'; } catch { return 'reader'; } };
 const setView = (v) => { try { localStorage.setItem(VIEW_KEY, v); } catch { /* private mode */ } };
 
@@ -60,7 +61,7 @@ const SIZES = [
   { key: 'big', label: 'Text: bigger', em: 1.18 },
   { key: 'biggest', label: 'Text: biggest', em: 1.38 },
 ];
-const SIZE_KEY = 'herdr-map.screen-size';
+const SIZE_KEY = 'one-way-out.screen-size';
 const getSize = () => {
   try { return SIZES.find((s) => s.key === localStorage.getItem(SIZE_KEY)) ?? SIZES[0]; }
   catch { return SIZES[0]; }
@@ -68,9 +69,13 @@ const getSize = () => {
 const setSize = (key) => { try { localStorage.setItem(SIZE_KEY, key); } catch { /* private mode */ } };
 const nextSize = () => SIZES[(SIZES.indexOf(getSize()) + 1) % SIZES.length];
 
-const TOOLS_KEY = 'herdr-map.screen-tools';
+const TOOLS_KEY = 'one-way-out.screen-tools';
 const getTools = () => { try { return localStorage.getItem(TOOLS_KEY) !== 'off'; } catch { return true; } };
 const setTools = (on) => { try { localStorage.setItem(TOOLS_KEY, on ? 'on' : 'off'); } catch { /* private mode */ } };
+// Smart folding also tucks the ● call lines away (reader.js findCalls); basic folds only their results.
+const FOLD_KEY = 'one-way-out.screen-fold';
+const getSmart = () => { try { return localStorage.getItem(FOLD_KEY) !== 'basic'; } catch { return true; } };
+const setSmart = (on) => { try { localStorage.setItem(FOLD_KEY, on ? 'smart' : 'basic'); } catch { /* private mode */ } };
 
 /* ── The mode pill: what the agent does about permission, and how to change it ──
    It reports before it acts. "Accepting all plans" is the mode where the agent stops asking,
@@ -100,20 +105,43 @@ function paintMode() {
     : 'Click to stop this agent asking before each step.';
 }
 
+// What the last paint was built from. A poll that brings back the same screen must not
+// rebuild it: measured 2026-09-03, the transcript was torn down and redrawn every 1.5s
+// whether or not a character had changed, which reads as the page flashing while you read.
+let paintedSig = '';
+
+/** Bring `el` to `html` touching only the top-level blocks that differ. A working agent's
+ *  spinner changes every poll; before this the whole transcript was thrown away and rebuilt
+ *  for it, so everything you were reading blinked once a second. Now only that block does. */
+function morph(el, html) {
+  const next = document.createElement('div');
+  next.innerHTML = html;
+  const olds = [...el.children], news = [...next.children];
+  news.forEach((n, i) => {
+    const o = olds[i];
+    if (!o) el.appendChild(n);
+    else if (o.outerHTML !== n.outerHTML) o.replaceWith(n);
+  });
+  for (const o of olds.slice(news.length)) o.remove();
+}
+
 function paintScreen() {
   paintMode();
   const el = document.querySelector('.screen');
   if (!el) return;
-  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
   const text = clean(rawText);
-  const lines = parseAnsi(text);
   const reader = getView() === 'reader';
+  const sig = [text, reader, getTools(), getSmart(), getSize().em, !!el.closest('.full')].join('\u0000');
+  if (sig === paintedSig && el.dataset.painted) return;
+  paintedSig = sig; el.dataset.painted = '1';
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  const lines = parseAnsi(text);
   el.classList.toggle('reader', reader);
   el.classList.toggle('hide-tools', reader && !getTools());
   // The live repaint every 1.5s must not slam shut a tool group you just opened.
   const wasOpen = [...el.querySelectorAll('.tool-run')].map((d) => d.open);
   el.style.setProperty('--text-em', getSize().em);
-  el.innerHTML = reader ? toLog(lines) : toTerminal(lines);
+  morph(el, reader ? toLog(lines, { smart: getSmart() }) : toTerminal(lines));
   el.querySelectorAll('.tool-run').forEach((d, i) => { if (wasOpen[i]) d.open = true; });
 
   // One chip per message you sent — click to jump back to that exchange.
@@ -121,8 +149,8 @@ function paintScreen() {
   if (turnsBar) {
     // Full page has room, so it keeps a longer trail of your own messages to jump back to.
     const keep = el.closest('.full') ? 40 : 12;
-    turnsBar.innerHTML = !reader ? '' : [...el.querySelectorAll('.blk.you')].slice(-keep).map((b) =>
-      `<button data-jump="${b.dataset.turn}" title="Jump to this message">${esc(b.textContent.trim().slice(0, 40))}</button>`).join('');
+    morph(turnsBar, reader ? [...el.querySelectorAll('.blk.you')].slice(-keep).map((b) =>
+      `<button data-jump="${b.dataset.turn}" title="Jump to this message">${esc(b.textContent.trim().slice(0, 40))}</button>`).join('') : '');
   }
   // The block log takes the whole panel width on purpose; the terminal is sized instead
   // to however many columns this particular agent is drawing.
@@ -139,8 +167,30 @@ function paintScreen() {
   }
 }
 
+/* Two different things were sharing one line above the transcript. A read that failed is a
+   passing condition — the next poll a second later can honestly clear it. An action that did
+   not happen is a fact about what you just did, and clearing it is your call, not a timer's.
+   Measured 2026-09-01: a reply that never reached the agent looked identical to one that did
+   about a second later, because the poll below wiped the banner out from under it. So a
+   failed action has its own line now, and only the "Got it" button takes it away. */
+/** It landed after all, so a notice saying it did not is no longer true and goes on its own.
+ *  Keeping a failure until it is read is the rule; keeping one the app has since disproved
+ *  would leave the screen arguing with itself. */
+const sayWorked = () => {
+  const el = document.querySelector('.act-error');
+  if (el) el.hidden = true;
+};
+
+const sayFailed = (message) => {
+  const el = document.querySelector('.act-error');
+  if (!el) return;
+  el.querySelector('.act-error-text').textContent = message;
+  el.hidden = false;
+};
+
 /* One failed poll must not blank the transcript you are reading — keep the last good text
-   and put the problem in a banner above it. */
+   and put the problem in a banner above it. This banner, and only this banner, is the poll's
+   to clear. */
 async function refreshScreen() {
   if (!openPane) return;
   const r = await get(`/api/pane/read?id=${encodeURIComponent(openPane)}&format=ansi`);
@@ -175,6 +225,13 @@ const markView = (ov) => {
     toolsBtn.classList.toggle('on', getTools());
     toolsBtn.textContent = getTools() ? 'Tools: shown' : 'Tools: hidden';
   }
+  const foldBtn = ov.querySelector('[data-act="fold"]');
+  if (foldBtn) {
+    foldBtn.hidden = getView() !== 'reader';
+    foldBtn.classList.toggle('on', getSmart());
+    foldBtn.textContent = getSmart() ? 'Folding: smart' : 'Folding: basic';
+    foldBtn.setAttribute('aria-pressed', String(getSmart()));
+  }
   const sizeBtn = ov.querySelector('[data-act="size"]');
   if (sizeBtn) {
     const now = getSize();
@@ -202,13 +259,14 @@ export function openSheet(paneId, label, cwd) {
   ov.className = `overlay agent-overlay${getFull() ? ' full' : ''}`;
   ov.innerHTML = `<div class="sheet">
     <div class="sheet-head">
-      <h3 class="display">${esc(label)}</h3>
+      <h3 class="display" title="${esc(label)}">${esc(label)}</h3>
       <div class="actions">
         <div class="seg" role="group" aria-label="How to show this agent">
           <button data-view="reader" title="One block per turn, sized for reading">Reader</button>
           <button data-view="terminal" title="The screen exactly as the terminal draws it">Terminal</button>
         </div>
         <button class="btn" data-act="tools" title="Show or hide the tool-call blocks — replies always stay">Tools</button>
+        <button class="btn" data-act="fold" title="Smart: tool-call lines fold away with their results. Basic: only the results fold">Folding: smart</button>
         <button class="btn" data-act="size">Text: normal</button>
         <button class="btn" data-act="full" title="Give this agent the whole window (F)">Full page</button>
         <button class="btn" data-act="focus">Open in Herdr</button>
@@ -216,11 +274,16 @@ export function openSheet(paneId, label, cwd) {
       </div>
     </div>
     <p class="read-error" role="status" aria-live="polite" hidden></p>
+    <p class="act-error" role="alert" hidden>
+      <span class="act-error-text"></span>
+      <button class="btn" data-act="seen"
+        title="Hide this line. It does not undo anything and it does not try again.">Got it</button>
+    </p>
     <div class="turns" aria-label="Jump to a message you sent"></div>
     <div class="screen"></div>
     <div class="shots" aria-label="Pictures going with your next message"></div>
     <div class="composer">
-      <textarea rows="1" maxlength="4000" placeholder="Reply to this agent — paste a picture to send it too, Enter sends, “/” lists commands, ↑ brings back what you sent"></textarea>
+      <textarea rows="1" maxlength="4000" placeholder="Reply — Enter sends · paste a picture to attach it · “/” lists commands · ↑ brings back what you sent"></textarea>
       <label class="btn file" title="Send a picture to this agent">Attach image<input type="file" accept="image/*" multiple hidden></label>
       <button class="btn primary" data-act="send">Send <small>↵</small></button>
     </div>
@@ -247,11 +310,13 @@ export function openSheet(paneId, label, cwd) {
   const box = ov.querySelector('textarea');
   const palette = attachPalette(box, () => cwd || null);
 
-  /** Send a run of keys to this agent; a failure is a banner, never a lost transcript. */
-  const pressKeys = async (keys, ov) => {
-    const r = await post('/api/pane/keys', { id: paneId, keys });
-    const banner = ov.querySelector('.read-error');
-    if (!r.ok && banner) { banner.hidden = false; banner.textContent = `That did not land — ${r.error}`; }
+  /** Press something in this agent: a run of keys, or one menu option. A key that did not
+   *  land says so and stays said — it never quietly disappears a second later, and it never
+   *  costs you the transcript you were reading. */
+  const pressKeys = async (what) => {
+    const r = await post('/api/pane/keys', { id: paneId, ...what });
+    if (!r.ok) sayFailed(`That key never reached the agent — ${r.error} Nothing was pressed, so it is still on the same screen.`);
+    else sayWorked();
     setTimeout(refreshScreen, 400);
   };
 
@@ -269,9 +334,7 @@ export function openSheet(paneId, label, cwd) {
     switching = false;
     paintMode();
     if (want && readMode(clean(rawText)) !== want) {
-      const banner = ov.querySelector('.read-error');
-      banner.hidden = false;
-      banner.textContent = 'That did not change the mode. Open the agent in Herdr and check it is at a prompt.';
+      sayFailed('The mode did not change — this agent is still in the mode it was already in. Open it in Herdr and check it is sitting at a prompt.');
     }
   };
 
@@ -290,19 +353,16 @@ export function openSheet(paneId, label, cwd) {
 
   /** Keep a pasted or dropped picture, ready to send. */
   const attachImage = async (file) => {
-    const banner = ov.querySelector('.read-error');
-    const say = (m) => { banner.hidden = false; banner.textContent = m; };
-    if (shots.length >= 6) return say('Six pictures is the most that go with one message.');
+    if (shots.length >= 6) return sayFailed('Six pictures is the most that go with one message, so that one was not attached.');
     const dataUrl = await new Promise((done) => {
       const fr = new FileReader();
       fr.onload = () => done(fr.result);
       fr.onerror = () => done(null);
       fr.readAsDataURL(file);
     });
-    if (!dataUrl) return say('That file could not be read.');
+    if (!dataUrl) return sayFailed('That file could not be read, so nothing was attached.');
     const r = await post('/api/pane/image', { dataUrl });
-    if (!r.ok) return say(r.error);
-    banner.hidden = true;
+    if (!r.ok) return sayFailed(`That picture was not saved, so it cannot go with your message — ${r.error}`);
     shots.push({ path: r.path, src: r.src });
     paintShots();
     box.focus();
@@ -314,15 +374,20 @@ export function openSheet(paneId, label, cwd) {
     const full = [...shots.map((s) => s.path), text].filter((s) => s.trim?.() ?? s).join('\n');
     if (!full.trim()) return;
     if (text.trim()) { history.push(text); historyAt = history.length; }
+    const kept = shots;                      // put back if it turns out nothing was sent
     box.value = '';
     shots = [];
     paintShots();
     autoGrow(box);
     const r = await post('/api/pane/send', { id: paneId, text: full });
-    // A failed send is a banner, same as a failed read — never overwrite the transcript
-    // you were reading with the error, or the agent's own words disappear underneath it.
-    const banner = ov.querySelector('.read-error');
-    if (!r.ok && banner) { banner.hidden = false; banner.textContent = `That reply did not send — ${r.error}`; }
+    // The severe one. Emptying the box on a send that failed erased the words as well as the
+    // fact, and the 1.5s poll then cleared the banner, so a reply the agent never saw looked
+    // exactly like one it had. Both come back, and the line above stays until you close it.
+    if (!r.ok) {
+      if (!box.value.trim()) { box.value = text; autoGrow(box); }
+      if (!shots.length) { shots = kept; paintShots(); }
+      sayFailed(`That reply did not send — ${r.error} It is back in the box below, and the agent has not seen it.`);
+    } else sayWorked();
     setTimeout(refreshScreen, 350);
   };
 
@@ -332,9 +397,12 @@ export function openSheet(paneId, label, cwd) {
     if (view) { setView(view); markView(ov); paintScreen(); return; }
     const act = e.target.closest('[data-act]')?.dataset.act;
     if (act === 'close') closeSheet();
+    // Closing the notice is the operator saying he has read it — it is not an undo or a retry.
+    if (act === 'seen') ov.querySelector('.act-error').hidden = true;
     if (act === 'send') sendText(box.value);
     if (act === 'enter') sendText('');
     if (act === 'tools') { setTools(!getTools()); markView(ov); paintScreen(); }
+    if (act === 'fold') { setSmart(!getSmart()); markView(ov); paintScreen(); }
     if (act === 'size') { setSize(nextSize().key); markView(ov); paintScreen(); }
     if (act === 'full') {
       ov.classList.toggle('full');
@@ -349,10 +417,12 @@ export function openSheet(paneId, label, cwd) {
       goToMode(now === null ? null : (now === 'auto' ? 'normal' : 'auto'));
     }
     const KEYS = { 'key-escape': ['escape'], 'key-up': ['up'], 'key-down': ['down'] };
-    // Picking option N walks the menu with its own arrow keys, then presses Enter.
+    // Picking option N sends which row it is; the server walks the menu to it.
     const opt = e.target.closest('[data-choice]');
-    const keys = KEYS[act] || (opt && chooseKeys(+opt.dataset.choice, +opt.dataset.choiceOf));
-    if (keys) pressKeys(keys, ov);
+    const press = KEYS[act] ? { keys: KEYS[act] }
+      : opt ? { choice: opt.dataset.choice }
+      : null;
+    if (press) pressKeys(press);
     const jump = e.target.closest('[data-jump]');
     if (jump) ov.querySelector(`.blk.you[data-turn="${jump.dataset.jump}"]`)
       ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
@@ -384,16 +454,10 @@ export function openSheet(paneId, label, cwd) {
 
   // A menu option is a button, so Enter and Space pick it the same as a click.
   ov.addEventListener('keydown', (e) => {
-    // F swaps in and out of full page — but not while you are writing the letter f.
-    if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey
-        && !/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) {
-      e.preventDefault();
-      return ov.querySelector('[data-act="full"]').click();
-    }
     const opt = e.target.closest('[data-choice]');
     if (!opt || (e.key !== 'Enter' && e.key !== ' ')) return;
     e.preventDefault();
-    pressKeys(chooseKeys(+opt.dataset.choice, +opt.dataset.choiceOf), ov);
+    pressKeys({ choice: opt.dataset.choice });
   });
 
   box.addEventListener('input', () => autoGrow(box));
@@ -422,19 +486,24 @@ export function openSheet(paneId, label, cwd) {
 // A card click means one of two things and never both: while a line is being drawn the click
 // finishes the line; otherwise it opens the agent.
 function openFromCard(e) {
-  if (isWiring() || e.target.closest('[data-port]')) return;
+  if (isWiring() || e.target.closest('[data-port], [data-move], .kind-menu')) return;
   const el = e.target.closest('[data-pane]');
   if (el && !e.target.closest('.overlay')) openSheet(el.dataset.pane, el.dataset.label, el.dataset.cwd);
 }
 
+// The full-page key presses the very button the mouse presses, so the two can never drift
+// apart. Which letter it is, and the words explaining it, are in keys.js.
+bindKey('full', () => document.querySelector('.agent-overlay [data-act="full"]')?.click());
+
 /** Start listening for card clicks. Called once by main.js, after the page exists. */
 export function watchCards() {
   document.addEventListener('click', openFromCard);
+  // The name is a real button, so Enter and Space open the card by themselves. The one
+  // thing to add: while a line is being drawn, those keys finish the line instead.
   document.addEventListener('keydown', (e) => {
-    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-pane]')) {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.card .open') && isWiring()) {
       e.preventDefault();
-      if (isWiring()) return finishFromKeyboard(e.target.dataset.pane);
-      openFromCard(e);
+      finishFromKeyboard(e.target.closest('[data-pane]').dataset.pane);
     }
   });
 }

@@ -1,4 +1,4 @@
-# Herdr Map — what it is for
+# One-Way-Out — what it is for
 
 > Written after the fact, from the code and from how it is actually used. The
 > success criteria below are what the app already does; anything marked
@@ -6,8 +6,9 @@
 
 ## Purpose
 One page that shows every AI agent running on this machine and lets you work all
-of them from there — read one, answer one, connect several, hand them a job —
-without touching the terminal.
+of them from there — read one, answer one, connect several, hand them a job, or
+turn one goal into a whole team that plans itself, reports back, and can be
+picked up again after a restart — without touching the terminal.
 
 **Who it is for:** one person (Shaf) running several coding agents at once on one
 Windows machine, on a second screen, glanced at constantly. Not multi-user, not
@@ -25,8 +26,16 @@ hosted, not shared. **[assumed]**
    and told what that connection means in plain words.
 5. **A connection is real instructions, not a drawing.** Sending gives every
    connected group the same job with each agent told its own part.
-6. **Nothing irreversible happens without asking.** Closing agents and sending
-   to live agents both confirm first.
+6. **Sending to more than one agent, or spawning new ones, always confirms
+   first.** Closing agents, dispatching a job to a connected group, running a
+   saved workflow, and approving a new run's task tree all ask before acting.
+   Replying to one agent you are already looking at does not — confirming that
+   would defeat the point of a chat box.
+7. **One goal can become a whole team, and nothing is lost if this app
+   restarts mid-run.** `#/run` plans a task tree from a goal, you approve it
+   before anything spawns, and every task's progress lives in a folder — not
+   in memory — so killing and restarting the server picks up exactly where it
+   left off.
 
 ## Non-goals
 - Not a canvas or whiteboard. No free-placed cards, no notes, no drawing tools.

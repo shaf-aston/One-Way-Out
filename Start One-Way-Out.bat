@@ -1,5 +1,5 @@
 @echo off
-REM === One-click Herdr: terminal + auto agents + Herdr Map ===
+REM === One-click Herdr: terminal + auto agents + One-Way-Out ===
 set "HERDR=%LOCALAPPDATA%\Programs\Herdr\bin\herdr.exe"
 
 REM 1) Herdr terminal. It needs Windows Terminal as its host, else no window shows up.
@@ -11,8 +11,9 @@ goto hostdone
 start "Herdr" cmd /c "%HERDR%"
 :hostdone
 
-REM 2) Herdr Map web view (if already running it just opens the browser tab)
-start "Herdr Map" /min cmd /c "node C:\Users\Shaf\herdr-map\server.mjs"
+REM 2) One-Way-Out web view (if already running it just opens the browser tab)
+REM    No window: output goes to %LOCALAPPDATA%\one-way-out.log. "Stop One-Way-Out.bat" stops it.
+wscript "C:\Users\Shaf\Downloads\vibe-code-projs\tools\herdr\scripts\map-hidden.vbs"
 
 REM 3) Give the server a moment to come up
 ping -n 5 127.0.0.1 >nul

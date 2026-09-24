@@ -1,7 +1,9 @@
 // The three id rules the whole app shares. Pure, no I/O — imported by core and transport alike
 // so a pane id or a file name is judged the same way everywhere.
 
-/** Herdr pane/terminal ids, e.g. "w2:p1". */
+/** Any Herdr id — a pane "w2:p1", a tab "w2:t1", a window "w2", a terminal "term_65…",
+ *  or the conversation a pane is having ("65030cb7-c89c-…"), which a saved step is written
+ *  against. All of them are short, and none of them may carry a path or a space. */
 export const isValidPaneId = (id) => typeof id === 'string' && /^[\w:.-]{1,64}$/.test(id);
 
 /** Saved-record ids double as file names, so they stay a strict slug — no paths, no traversal. */

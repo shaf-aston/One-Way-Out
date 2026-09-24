@@ -1,9 +1,9 @@
 {
-  "name": "herdr-map",
+  "name": "one-way-out",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "A live, luxury visual map of your Herdr AI agents (levels + status), auto-refreshing.",
+  "description": "A live visual map and control panel for AI coding agents running in Herdr.",
   "scripts": {
     "start": "node server.mjs",
     "verify": "node scripts/verify.mjs"

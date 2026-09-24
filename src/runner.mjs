@@ -1,6 +1,8 @@
 // Service layer: runs a saved flow step by step. Knows nothing about HTTP or the UI,
 // and talks to Herdr only through the swap-seam in herdr.mjs.
-import { getAgent, runInPane, startAgent } from './herdr.mjs';
+import { getAgent, getSnapshot, runInPane, startAgent } from './herdr.mjs';
+import { buildModel, listAgents } from './model.mjs';
+import { resolveTarget } from './flows.mjs';
 
 const runs = new Map();
 let counter = 0;
@@ -61,7 +63,7 @@ async function execute(bin, run, flow, limits) {
     if (run.cancelled) { view.state = 'skipped'; view.note = 'Stopped'; continue; }
     view.state = 'running';
     try {
-      let target = step.agentId;
+      let target = null;
       if (step.spawn) {
         view.note = 'Starting a new agent…';
         target = await startAgent(bin, {
@@ -73,7 +75,19 @@ async function execute(bin, run, flow, limits) {
         });
         view.target = target;
         const ready = await waitReady(bin, target, run, limits.spawnReadyMs, limits.pollMs);
-        view.note = ready ? 'Agent is up.' : 'Started, but Herdr never reported it as an agent — sending anyway.';
+        // A pane that never became an agent is a plain shell sitting at a prompt, and text
+        // typed at a prompt is run, not read. Check the start command rather than send it.
+        if (!ready) throw new Error(`Step ${i + 1} started a pane, but Herdr never reported an agent in it, so nothing was sent — check the start command.`);
+        view.note = 'Agent is up.';
+      } else {
+        // Asked again for every step, not once per run: an agent can be moved between one step
+        // and the next, and the pane a closed agent leaves behind is given to the next one.
+        const snap = await getSnapshot(bin);
+        if (!snap.ok) throw new Error(`Step ${i + 1} could not be sent — Herdr did not say which agents are running.`);
+        const found = resolveTarget(step, listAgents(buildModel(snap.snapshot)), i + 1);
+        if (!found.ok) throw new Error(found.error);
+        target = found.target;
+        view.target = target;
       }
       if (run.cancelled) { view.state = 'skipped'; view.note = 'Stopped'; continue; }
 
@@ -127,8 +141,9 @@ export function startRun(bin, flow, limits) {
     id, flowId: flow.id, name: flow.name, status: 'running', cancelled: false, startedAt: Date.now(),
     steps: flow.steps.map((s, i) => ({
       n: i + 1,
-      label: s.spawn ? `New agent · ${s.spawn.label}` : s.agentId,
-      target: s.agentId ?? null,
+      label: s.spawn ? `New agent · ${s.spawn.label}` : 'Agent',
+      // Which pane it lands in is only known when the step runs — see resolveTarget.
+      target: null,
       state: 'pending',
       note: '',
     })),

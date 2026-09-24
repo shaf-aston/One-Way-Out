@@ -7,13 +7,36 @@ export const basename = (p) => p ? p.replace(/[/\\]+$/,'').split(/[/\\]/).pop() 
  * The one line in the header where the page speaks. Every part of the app says things here,
  * so it says them the same way: passing `bad` marks it as a problem, and clearing the text
  * clears the mark too — otherwise the red outlives the message that earned it.
+ *
+ * A confirmation and a problem are not the same kind of thing. A confirmation may be handed
+ * `forMs` and tidy itself away after that long; a problem never does, whatever it is handed —
+ * it stays until the page speaks again or you click it. Two callers used to delete their own
+ * line after six seconds regardless, so "3 would not close" disappeared while those three
+ * agents were still running.
+ *
+ * @param {string} text - what to say, in plain words. Empty clears the line.
+ * @param {{bad?:boolean, forMs?:number}} opts - `bad` marks it a problem; `forMs` is how long
+ *   a confirmation lingers, and is ignored outright for a problem.
  */
-export function headMsg(text, { bad = !!text } = {}) {
+let msgTimer = null, msgClickable = false;
+export function headMsg(text, { bad = !!text, forMs = 0 } = {}) {
   const el = $('head-msg');
   if (!el) return;
+  if (!msgClickable) { msgClickable = true; el.addEventListener('click', () => headMsg('')); }
+  clearTimeout(msgTimer);
+  const problem = !!text && bad;
   el.textContent = text || '';
-  el.classList.toggle('bad', !!text && bad);
+  el.classList.toggle('bad', problem);
+  el.title = problem ? 'Click when you have read this. It does not undo or retry anything.' : '';
+  if (text && !problem && forMs > 0) msgTimer = setTimeout(() => headMsg(''), forMs);
 }
+
+/* ── The latest map, in one place ──
+   The map is polled in index.html and read by every panel. It lives here, with the other
+   shared view helpers, so no panel has to import it from another panel. */
+let latest = null;
+export const setModel = (m) => { latest = m; };
+export const theModel = () => latest;
 
 /**
  * Flatten the map model to just its agents — the roster both panels pick from.
@@ -23,7 +46,7 @@ export function headMsg(text, { bad = !!text } = {}) {
 export function agentsOf(m) {
   const all = (m?.workspaces ?? []).flatMap((w) => w.tabs.flatMap((t) => t.panes
     .filter((p) => p.isAgent)
-    .map((p) => ({ id: p.id, label: p.label, cwd: p.cwd, workspace: w.label }))));
+    .map((p) => ({ id: p.id, session: p.session, label: p.label, cwd: p.cwd, workspace: w.label }))));
   const seen = new Map();
   for (const a of all) seen.set(a.label, (seen.get(a.label) ?? 0) + 1);
   return all.map((a) => (seen.get(a.label) > 1
@@ -33,7 +56,7 @@ export function agentsOf(m) {
 
 export async function get(path) {
   try { return await (await fetch(path, { cache:'no-store' })).json(); }
-  catch (e) { return { ok:false, error:'Cannot reach the Herdr Map server.' }; }
+  catch (e) { return { ok:false, error:'Cannot reach the One-Way-Out server.' }; }
 }
 
 export async function post(path, body) {
@@ -41,7 +64,7 @@ export async function post(path, body) {
     return await (await fetch(path, {
       method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body),
     })).json();
-  } catch (e) { return { ok:false, error:'Cannot reach the Herdr Map server.' }; }
+  } catch (e) { return { ok:false, error:'Cannot reach the One-Way-Out server.' }; }
 }
 
 /**
@@ -59,16 +82,86 @@ export const okToDiscard = (dirty, what = 'what you typed') =>
   !dirty || window.confirm(`Throw away ${what}?`);
 
 /**
- * Escape closes the top overlay. Registered ONCE per panel at load time — the old code added
- * a fresh listener on every open and only ever removed the one that fired, so they piled up.
+ * A small menu at a point on screen. The one menu this app has: connecting agents and moving
+ * them both open it, so there is a single set of keyboard, edge-flipping and dismissal rules
+ * rather than one per feature.
+ *
+ * Choosing an item IS the confirmation — each label says what will happen in full words, so
+ * nothing here opens a second dialog to ask again.
+ *
+ * @param {{x:number,y:number}} at - where to put it; it flips back inside near an edge
+ * @param {string} title - what the choice is about, read out to screen readers
+ * @param {Array<{key:string,label:string,blurb?:string,cls?:string,head?:string}>} items
+ *   `head` starts a labelled section; an item with no `key` is not clickable.
+ * @param {(key:string) => void} pick
+ */
+export function menuAt(at, title, items, pick) {
+  document.querySelector('.kind-menu')?.remove();
+  const rows = items.filter(Boolean);
+  if (!rows.length) return;
+  const m = document.createElement('div');
+  m.className = 'kind-menu';
+  m.setAttribute('role', 'menu');
+  m.setAttribute('aria-label', title);
+  m.innerHTML = rows.map((it) => (it.head
+    ? `<p class="menu-head">${esc(it.head)}</p>`
+    : `<button role="menuitem" class="${esc(it.cls ?? '')}" data-pick="${esc(it.key)}">${esc(it.label)}${
+      it.blurb ? `<small>${esc(it.blurb)}</small>` : ''}</button>`)).join('');
+  document.body.appendChild(m);
+  // Keep it on screen: a menu opened near the right or bottom edge flips back inside.
+  const r = m.getBoundingClientRect();
+  m.style.left = `${Math.max(8, Math.min(at.x, innerWidth - r.width - 8))}px`;
+  m.style.top = `${Math.max(8, Math.min(at.y, innerHeight - r.height - 8))}px`;
+  m.querySelector('button')?.focus();
+  const shut = () => { m.remove(); removeEventListener('pointerdown', away, true); };
+  const away = (e) => { if (!e.target.closest('.kind-menu')) shut(); };
+  setTimeout(() => addEventListener('pointerdown', away, true));
+  m.addEventListener('keydown', (e) => { if (e.key === 'Escape') { shut(); headMsg(''); } });
+  m.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-pick]');
+    if (!b) return;
+    shut();
+    pick(b.dataset.pick);
+  });
+}
+
+/* ── Escape closes the panel on top ──
+   ONE listener for the whole page, holding a list of panels — not a listener each. Each panel
+   used to add its own and check only that its own overlay was there, so a single press closed
+   every open panel at once: measured 2026-09-02, Escape over the help sheet also threw away
+   the New agent form underneath it and everything typed into it.
+   Asking each listener "am I the top one?" does not fix that, and that is the trap worth
+   writing down: the first listener to run closes itself, and by the time the next one asks,
+   it IS the top one. So the top is decided once, from the panels that were open before
+   anything moved. */
+const panels = [];
+let listening = false;
+
+/**
+ * Let a panel be closed by Escape when it is the one on top. Called ONCE per panel at load
+ * time — the original code added a fresh listener on every open and only ever removed the one
+ * that fired, so they piled up.
  * @param {string} selector - the overlay this panel owns
  * @param {() => void} close
  */
 export function onOverlayEscape(selector, close) {
+  panels.push({ selector, close });
+  // The listener is added when the first panel asks for one, never at import: the pure
+  // helpers in this file are also imported outside a browser by npm run verify, where
+  // there is no document to listen on.
+  if (listening) return;
+  listening = true;
   document.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape' || !document.querySelector(selector)) return;
+    if (e.key !== 'Escape') return;
     if (document.querySelector('.palette:not([hidden])')) return;
-    close();
+    const open = panels
+      .map((p) => ({ close: p.close, el: document.querySelector(p.selector) }))
+      .filter((p) => p.el);
+    if (!open.length) return;
+    // Last in the page is the one drawn on top of the others.
+    open.sort((a, b) =>
+      (a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
+    open[open.length - 1].close();
   });
 }
 
@@ -167,10 +260,14 @@ export function attachPalette(el, getCwd) {
  * characters; both look like damage once the text is re-wrapped. Presentational only —
  * it drops padding and rules, never words, so it cannot show you something that isn't there.
  */
+const TABLE_RULE = /^(?:\s|\x1b\[[\d;]*m)*[┌├└][─┬┼┴┐┤┘]+(?:\s|\x1b\[[\d;]*m)*$/u;
 export function clean(text) {
   return String(text ?? '')
     .split('\n')
-    .map((l) => l.replace(/[─-╿]{3,}/g, '').replace(/\s+$/, ''))
+    // Padding sits BEFORE the row's closing colour code, so trailing spaces are trimmed
+    // through any escape codes that follow them.
+    // A table's own ┌├└ border stays: it is what tells the reader where one row ends.
+    .map((l) => (TABLE_RULE.test(l) ? l : l.replace(/[─-╿]{3,}/g, '')).replace(/\s+((?:\x1b\[[\d;]*m)*)$/, '$1'))
     .filter((l, i, a) => l.trim() || (a[i - 1] ?? '').trim())
     .join('\n')
     .trim();

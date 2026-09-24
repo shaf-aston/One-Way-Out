@@ -3,25 +3,32 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Herdr · Live Map</title>
+<title>One-Way-Out</title>
 <link rel="stylesheet" href="./app.css">
 </head>
 <body>
   <header>
     <div class="brand">
-      <h1 class="display">Herdr</h1>
+      <h1 class="display">One-Way-Out</h1>
       <small>Live Agent Map</small>
     </div>
     <div class="head-right">
       <span class="flow-msg" id="head-msg" role="status" aria-live="polite"></span>
       <button class="btn" id="new-agent" title="Start an agent in a folder (N)">＋ New agent</button>
       <a class="btn" href="#/" data-nav="sessions" title="The map of every agent">Sessions</a>
+      <a class="btn" href="#/org" data-nav="org" title="Who leads whom, in tiers (O)">Hierarchy</a>
       <a class="btn" href="#/flows" data-nav="flows" title="Chain agents one after another (W)">Workflows</a>
+      <a class="btn" href="#/run" data-nav="run" title="One goal, split into a team of agents (R)">New run</a>
+      <a class="btn" href="#/terminal" data-nav="terminal" title="Change how Herdr itself looks and behaves">Terminal</a>
+      <button class="btn" data-help title="What this screen is, and every key you can press (press ?)">? Help</button>
       <div class="live" id="live"><span class="dot-live"></span><span id="live-text">connecting…</span></div>
     </div>
   </header>
 
   <main>
+    <!-- How many agents, and the two standing warnings, on one line. Agents sharing a folder
+         used to have a band of their own here; the ⚠ is on the cards it is about, so this
+         line carries the count of them and nothing else says it twice. -->
     <section class="counts" id="counts" hidden></section>
     <!-- Appears only once lines exist. Drawing them is the point; this is what they are FOR. -->
     <section class="wired" id="wired" hidden>
@@ -33,10 +40,9 @@
         <button class="btn" id="wired-clear" title="Remove every line">Clear lines</button>
       </div>
     </section>
-    <section class="needs" id="needs" hidden>
-      <h2 class="section-title">Needs you</h2>
-      <div class="needs-cards" id="needs-cards"></div>
-    </section>
+    <!-- One question, however many agents are stopped on it, answered for all of them at
+         once. Which questions, and which answers to offer, come from config.json. -->
+    <section class="waiting" id="waiting" hidden></section>
     <div class="workspaces" id="workspaces"></div>
     <div id="state"></div>
     <div id="view-slot"></div>
@@ -57,17 +63,38 @@
       <marker id="head" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
         <path d="M0,0 L8,4 L0,8 z" fill="var(--gold)"></path>
       </marker>
+      <!-- One head per meaning, because the colour is how you tell the lines apart without
+           stopping to read them. A marker cannot inherit the line's colour, so each is its own. -->
+      <marker id="head-lead" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L8,4 L0,8 z" fill="var(--wire-lead)"></path>
+      </marker>
+      <marker id="head-flow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L8,4 L0,8 z" fill="var(--wire-flow)"></path>
+      </marker>
+      <marker id="head-peer" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L8,4 L0,8 z" fill="var(--wire-peer)"></path>
+      </marker>
+      <!-- The small head pointing back up a leader's line: the work goes down, the answer
+           comes back. One line, both directions, exactly as the relationship works. -->
+      <marker id="tail-lead" viewBox="0 0 8 8" refX="1" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+        <path d="M8,0 L0,4 L8,8 z" fill="var(--wire-lead)" opacity=".75"></path>
+      </marker>
     </defs>
     <g id="link-layer"></g>
   </svg>
-  <footer>Click any agent to read &amp; answer it · drag the dot on its edge to another agent to connect them · <b>N</b> new agent</footer>
 
 <script type="module">
-  import { $, esc, basename, get, post, confirmOnce, onOverlayEscape, headMsg } from './ui.js';
-  import { openFlows, setModel, setPoll } from './flows.js';
+  import { $, esc, basename, get, post, confirmOnce, onOverlayEscape, headMsg, setModel, theModel } from './ui.js';
+  import { openFlows, setPoll } from './flows.js';
   import { drawLinks } from './connect.js';
+  import { moveButton } from './move.js';
+  import { openOrg, paintOrg } from './org.js';
+  import { openSettings } from './settings.js';
+  import { openRun, setPoll as setRunPoll } from './run.js';
   import { openSheet, closeSheet, setPollMs, watchCards } from './agent-view.js';
   import { startRouter, linkTo, go } from './router.js';
+  import { bindKey, startKeys } from './keys.js';
+  import { startGuide } from './guide.js';
 
   const STATUS = {
     working: { label:'Working', cls:'s-working', v:'--working' },
@@ -78,59 +105,139 @@
   };
 
   let pollMs = 1500;
-  try { pollMs = (await (await fetch('/api/config')).json()).pollIntervalMs || 1500; } catch {}
+  let promptScanMs = 5000;
+  try {
+    const cfg = await (await fetch('/api/config')).json();
+    pollMs = cfg.pollIntervalMs || 1500;
+    promptScanMs = cfg.promptScanMs || 5000;
+  } catch {}
   setPoll(pollMs);
+  setRunPoll(pollMs);
   setPollMs(pollMs);
   watchCards();
 
   function setLive(ok, text) {
     $('live').classList.toggle('stale', !ok);
-    $('live-text').textContent = text;
+    if ($('live-text').textContent !== text) $('live-text').textContent = text;
+  }
+
+  /* ── Updating the board without redrawing it ──
+     Setting innerHTML on the whole board throws away every card and builds new ones. The
+     browser then replays each card's 0.4s fade-and-slide, so ONE agent changing its status
+     made all twelve visibly re-appear at once. Measured 2026-09-03 with a simulated busy
+     agent: 10 columns and every card destroyed in 12 seconds, with nothing else changing.
+     Instead: match what is on screen to what should be, by a key, and touch only what
+     genuinely differs. A card is keyed by its pane, a column by its state — so an agent
+     moving between columns is carried across rather than rebuilt. */
+
+  /** Put `parent`'s children in step with `next`'s, matching on `keyAttr`.
+   *  `update(old, new)` decides what happens to a child that exists in both; without it the
+   *  old one is replaced only when its markup actually differs. */
+  function morphKeyed(parent, next, keyAttr, update) {
+    const olds = new Map();
+    for (const el of [...parent.children]) {
+      const k = el.getAttribute(keyAttr);
+      if (k === null) el.remove(); else olds.set(k, el);
+    }
+    let at = null;                       // the child the next one must follow, so order holds
+    for (const n of [...next.children]) {
+      const k = n.getAttribute(keyAttr);
+      const o = k === null ? null : olds.get(k);
+      let keep = n;
+      if (o) {
+        olds.delete(k);
+        keep = o;
+        if (update) update(o, n);
+        else if (o.outerHTML !== n.outerHTML) { o.replaceWith(n); keep = n; }
+      }
+      if (keep.parentNode !== parent || keep.previousElementSibling !== at) {
+        if (at) at.after(keep); else parent.prepend(keep);
+      }
+      at = keep;
+    }
+    for (const gone of olds.values()) gone.remove();
+  }
+
+  /** Copy attributes from `n` onto `o` without touching anything else about `o`. */
+  function syncAttrs(o, n) {
+    for (const a of n.attributes) if (o.getAttribute(a.name) !== a.value) o.setAttribute(a.name, a.value);
+    for (const a of [...o.attributes]) if (!n.hasAttribute(a.name)) o.removeAttribute(a.name);
+  }
+
+  /** One column updated in place: its heading and count, then its cards one by one. */
+  function morphCol(o, n) {
+    syncAttrs(o, n);
+    const oh = o.querySelector('.col-head'), nh = n.querySelector('.col-head');
+    if (oh && nh && oh.outerHTML !== nh.outerHTML) oh.replaceWith(nh);
+    const ow = o.querySelector('.col-why'), nw = n.querySelector('.col-why');
+    if (ow && nw && ow.innerHTML !== nw.innerHTML) ow.innerHTML = nw.innerHTML;
+    const op = o.querySelector('.panes'), np = n.querySelector('.panes');
+    if (op && np) morphKeyed(op, np, 'data-pane');
+    else if (op !== np && (op?.outerHTML ?? '') !== (np?.outerHTML ?? '')) {
+      // A column that just emptied, or just filled: swap that part only.
+      const oNone = o.querySelector('.col-none'), nNone = n.querySelector('.col-none');
+      if (np && oNone) oNone.replaceWith(np);
+      else if (nNone && op) op.replaceWith(nNone);
+    }
+  }
+
+  function morphBoard(host, html) {
+    const next = document.createElement('div');
+    next.innerHTML = html;
+    const oldBoard = host.querySelector('.board'), newBoard = next.querySelector('.board');
+    if (!oldBoard || !newBoard) { host.innerHTML = html; return; }
+    syncAttrs(oldBoard, newBoard);
+    morphKeyed(oldBoard, newBoard, 'data-col', morphCol);
+    // The Terminals section sits outside the board and changes rarely.
+    const oldTail = host.querySelector('.shells'), newTail = next.querySelector('.shells');
+    if (newTail && !oldTail) oldBoard.after(newTail);
+    else if (!newTail && oldTail) oldTail.remove();
+    else if (newTail && oldTail && newTail.outerHTML !== oldTail.outerHTML) morphCol(oldTail, newTail);
   }
 
   function renderState(html) {
     $('state').innerHTML = html;
-    for (const el of ['counts','needs','legend','close-all']) $(el).hidden = true;
+    for (const el of ['counts','waiting','legend','close-all']) $(el).hidden = true;
     $('workspaces').innerHTML = '';
     drawLinks();
   }
 
-  // How long a pane has held its current status — this app's own observation (first seen
-  // here, refreshed every poll), not something Herdr reports. Good enough for a faint hint.
-  const sinceByPane = new Map();
-  function since(p) {
-    const rec = sinceByPane.get(p.id);
-    if (!rec || rec.status !== p.status) { sinceByPane.set(p.id, { status: p.status, at: Date.now() }); return 0; }
-    return Date.now() - rec.at;
-  }
-  function ago(ms) {
-    const m = Math.floor(ms / 60000);
-    if (m < 1) return 'just now';
-    if (m < 60) return `${m}m`;
-    return `${Math.floor(m / 60)}h`;
-  }
+  // Which other agents sit in the same folder as this one. Filled in by render() from the
+  // server's shared-folder list, so the warning rides on the card it is about.
+  let sharedBy = new Map();
+
 
   function card(p) {
     const st = STATUS[p.status] || STATUS.unknown;
+    const mates = sharedBy.get(p.id) ?? [];
     const cls = ['card', p.isAgent ? `st-${p.status} agent-click` : 'terminal', p.focused ? 'focused' : ''].join(' ');
-    const age = p.isAgent ? since(p) : 0;
-    return `<div class="${cls}" title="${esc(p.cwd ?? '')}" ${p.isAgent ? `role="button" tabindex="0" data-pane="${esc(p.id)}" data-label="${esc(p.label)}" data-cwd="${esc(p.cwd ?? '')}"` : ''}>
+    // An agent card is an article with three sibling buttons: the name opens it (and a
+    // stretched hit area makes the whole card do the same), the mover moves it, the port
+    // connects it. Nothing interactive sits inside anything else interactive.
+    return `<${p.isAgent ? 'article' : 'div'} class="${cls}" title="${esc(p.cwd ?? '')}" ${p.isAgent ? `data-pane="${esc(p.id)}" data-label="${esc(p.label)}" data-cwd="${esc(p.cwd ?? '')}" aria-label="${esc(p.label)}"` : ''}>
       <div class="top">
-        <span class="name">${p.focused ? '<b title="Focused in Herdr">★</b> ' : ''}${esc(p.label)}</span>
-        ${p.isAgent ? `<span class="since">${ago(age)}</span>` : ''}
+        ${p.isAgent
+          ? `<button class="name open" aria-label="Open ${esc(p.label)}">${p.focused ? '<b title="Focused in Herdr">★</b> ' : ''}${esc(p.label)}</button>`
+          : `<span class="name">${esc(p.label)}</span>`}
       </div>
+      ${p.title ? `<div class="self-title">${esc(p.title)}</div>` : ''}
       <div class="status ${st.cls}"><i class="swatch" style="background:var(${st.v})"></i>${st.label}</div>
-      ${p.cwd ? `<div class="cwd">${esc(basename(p.cwd))}</div>` : ''}
-      ${p.isAgent ? `<button class="port" data-port="${esc(p.id)}" tabindex="-1"
-        title="Drag this to another agent to connect them" aria-label="Connect ${esc(p.label)} to another agent"></button>` : ''}
-    </div>`;
+      ${p.cwd ? `<div class="meta">
+        <span class="tag cwd">${esc(basename(p.cwd))}</span>
+        ${mates.length ? `<span class="tag warn" title="Also in this folder: ${esc(mates.join(', '))}. Two writing at once can undo each other's work.">⚠ shares folder with ${mates.length}</span>` : ''}
+      </div>` : ''}
+      ${p.isAgent ? moveButton(p) : ''}
+      ${p.isAgent ? `<button class="port" data-port="${esc(p.id)}" tabindex="0"
+        title="Drag this to another agent to connect them, or press Enter and Tab to one"
+        aria-label="Connect ${esc(p.label)} to another agent — press Enter, then Tab to the other agent and press Enter again"></button>` : ''}
+    </${p.isAgent ? 'article' : 'div'}>`;
   }
 
   /* ── Views: Connections and Workflows each own a URL ──
      The panels themselves are unchanged. They still build an overlay; this lifts that
      overlay out of the floating layer and into the page, which is the whole difference
      between "a popup over the map" and "a place you navigated to". */
-  const VIEWS = { flows: () => openFlows() };
+  const VIEWS = { org: () => openOrg(), flows: () => openFlows(), run: () => openRun(), terminal: () => openSettings() };
   let at = { view: 'sessions', arg: null };
 
   /**
@@ -169,7 +276,9 @@
     // hand us a panel some other call built.
     const before = new Set(document.querySelectorAll('body > .overlay'));
     await VIEWS[name](arg);
-    const ov = [...document.querySelectorAll('body > .overlay:not(.agent-overlay)')]
+    // Only a panel that IS a place can be planted as one. The others — the agent viewer, the
+    // help sheet, the New agent form — float, and must never be picked up by this.
+    const ov = [...document.querySelectorAll('body > .overlay:not(.agent-overlay):not(.help-overlay):not(.spawn-overlay)')]
       .find((o) => !before.has(o));
     // Navigating again while this one loaded leaves it stranded in the floating layer,
     // where it would silently swallow every click on the page behind it.
@@ -184,7 +293,7 @@
 
   // The map rail beside a view: on by default, remembered, and it never changes the URL —
   // it is how wide the view is, not where you are.
-  const RAIL_KEY = 'herdr-map.view-rail';
+  const RAIL_KEY = 'one-way-out.view-rail';
   const getRail = () => { try { return localStorage.getItem(RAIL_KEY) !== 'off'; } catch { return true; } };
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-act="rail"]');
@@ -211,23 +320,41 @@
     showView(view, arg);
   });
 
-  /* Keys: W workflows, N new agent — only when you are not typing.
-     The agent viewer is not a blocker: pressing W swaps it for the panel. */
-  document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey || e.altKey || e.metaKey) return;
-    if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)) return;
-    if (document.querySelector('.overlay:not(.agent-overlay)')) return;
-    const key = e.key.toLowerCase();
-    if (!'wn'.includes(key)) return;
-    if (document.querySelector('.agent-overlay') && !closeSheet()) return;
-    e.preventDefault();
-    if (key === 'n') return openSpawn();
-    // The keys are shortcuts to the same links the nav uses — one way to reach a view.
-    go({ w: 'flows' }[key]);
-  });
+  /* The keys that reach a view are shortcuts to the same links the nav uses — one way to get
+     anywhere. Which letter each one is, and the sentence explaining it, live in the single list
+     in keys.js that the help panel is also drawn from; this file only says what happens.
+     The agent viewer is not a blocker: pressing one puts it away first. */
+  const away = (run) => () => { if (!document.querySelector('.agent-overlay') || closeSheet()) run(); };
+  bindKey('new-agent', away(openSpawn));
+  bindKey('hierarchy', away(() => go('org')));
+  bindKey('workflows', away(() => go('flows')));
+  bindKey('run', away(() => go('run')));
+  startGuide(bindKey);
+  startKeys();
 
   /* ── Start a new agent: pick a folder, that is the whole dialog ── */
   $('new-agent').addEventListener('click', () => openSpawn());
+  /* Where a new agent lands. Before this existed every agent went wherever Herdr's focus
+     happened to be, split sideways — which is how one project ended up spread over nine
+     windows, and how a pane can get narrow enough that Claude Code quits on startup.
+     A window of its own is the default because it is the only choice that cannot squeeze
+     an agent already running. */
+  const destOptions = () => {
+    const ws = theModel()?.workspaces ?? [];
+    const pages = ws.flatMap((w) => w.tabs.map((t) => ({ v: `tab:${t.id}`, t: `${w.label} · ${t.label}` })));
+    const group = (label, rows) => (rows.length
+      ? `<optgroup label="${label}">${rows.map((r) => `<option value="${esc(r.v)}">${esc(r.t)}</option>`).join('')}</optgroup>`
+      : '');
+    return '<option value="new_workspace">A window of its own</option>'
+      + group('Its own page in a window you already have', ws.map((w) => ({ v: `new_tab:${w.id}`, t: w.label })))
+      + group('Beside the agents already on a page', pages);
+  };
+  const parseDest = (v) => {
+    if (v.startsWith('new_tab:')) return { type: 'new_tab', workspaceId: v.slice(8) };
+    if (v.startsWith('tab:')) return { type: 'tab', tabId: v.slice(4), split: 'down' };
+    return { type: 'new_workspace' };
+  };
+
   async function openSpawn() {
     document.querySelector('.spawn-overlay')?.remove();
     const ov = document.createElement('div');
@@ -244,6 +371,12 @@
       <div class="folder-list">Reading your folders…</div>
       <label class="fld"><span>Or type a full path — checked when you press Start</span>
         <input class="spawn-cwd" placeholder="C:\\Users\\Shaf\\Downloads\\my-project" />
+      </label>
+      <label class="fld"><span>What is this one for? — this is the name you will see on the map</span>
+        <input class="spawn-name" maxlength="40" placeholder="e.g. fix the ingestion page" />
+      </label>
+      <label class="fld"><span>Where it goes in Herdr</span>
+        <select class="spawn-dest">${destOptions()}</select>
       </label>
       <div class="flow-foot">
         <button class="btn primary" data-act="start" disabled>Start agent</button>
@@ -278,28 +411,38 @@
         const msg = ov.querySelector('.spawn-msg');
         startBtn.disabled = true;
         msg.textContent = 'Starting…';
-        const out = await post('/api/agents/start', { cwd: cwdBox.value.trim() });
+        const out = await post('/api/agents/start', {
+          cwd: cwdBox.value.trim(),
+          label: ov.querySelector('.spawn-name').value.trim(),
+          dest: parseDest(ov.querySelector('.spawn-dest').value),
+        });
         msg.classList.toggle('bad', !out.ok);
-        msg.textContent = out.ok ? `Started ${out.label}.` : out.error;
+        msg.textContent = out.ok ? `Started ${out.label}.${out.warning ? ` ${out.warning}` : ''}` : out.error;
         startBtn.disabled = false;
         if (out.ok) { tick(); setTimeout(() => ov.remove(), 900); }
       }
     });
-    cwdBox.focus();
+    (ov.querySelector('.spawn-name') ?? cwdBox).focus();
   }
+  onOverlayEscape('.org-overlay', () => document.querySelector('.org-overlay')?.remove());
   onOverlayEscape('.spawn-overlay', () => document.querySelector('.spawn-overlay')?.remove());
   onOverlayEscape('.agent-overlay', () => closeSheet());
 
   /* ── Closing agents: whole map from the header, one workspace from its own header ── */
   async function closeAgents(workspaceId, howMany, where) {
-    if (!confirm(`Close ${howMany} agent${howMany === 1 ? '' : 's'} in ${where}? Anything unsaved in them is lost.`)) return;
-    $('head-msg').textContent = 'Closing…';
-    const r = await post('/api/agents/close-all', { workspaceId });
-    $('head-msg').classList.toggle('bad', !r.ok);
-    $('head-msg').textContent = r.ok
-      ? (r.failed ? `Closed ${r.closed} · ${r.failed} would not close` : `Closed ${r.closed}`)
-      : r.error;
-    setTimeout(() => { $('head-msg').textContent = ''; }, 6000);
+    if (!confirmOnce(`Close ${howMany} agent${howMany === 1 ? '' : 's'} in ${where}? Anything unsaved in them is lost.`)) return;
+    headMsg('Closing…', { bad: false });
+    // The number just agreed to travels with the request. The server counts again from Herdr
+    // itself and closes nothing at all if the answer has moved on — so what is shut down is
+    // always the number that was named, never one that quietly grew while the box sat open.
+    const r = await post('/api/agents/close-all', { workspaceId, expect: howMany });
+    // Agents that would not close are the half worth keeping on screen: they are still running,
+    // so this must not tidy itself away six seconds later as though the job were finished.
+    headMsg(r.ok
+      ? (r.failed
+        ? `Closed ${r.closed} · ${r.failed} would not close and ${r.failed === 1 ? 'is' : 'are'} still running.`
+        : `Closed ${r.closed}.`)
+      : r.error, { bad: !r.ok || !!r.failed, forMs: 6000 });
     tick();
   }
 
@@ -314,7 +457,7 @@
   const agentsIn = (w) => w.tabs.reduce((n, t) => n + t.panes.filter((p) => p.isAgent).length, 0);
   const shellsIn = (w) => w.tabs.reduce((n, t) => n + t.panes.filter((p) => !p.isAgent).length, 0);
 
-  function render(model) {
+  function render(model, shared = [], board = []) {
     $('state').innerHTML = '';
     setModel(model);
     const c = lastCounts = model.counts;
@@ -322,27 +465,29 @@
     $('counts').hidden = false;
     $('legend').hidden = false;
     // A status nobody is in is not news — only the ones with agents in them are shown.
-    $('counts').innerHTML = `<b>${c.total} agent${c.total === 1 ? '' : 's'}</b>` + [
-      ['Working', c.working, '--working'],
-      ['Blocked', c.blocked, '--blocked'],
-      ['Done', c.done, '--done'],
-      ['Idle', c.idle, '--idle'],
-    ].filter(([, n]) => n > 0)
-     .map(([k, n, v]) => `<span><i class="swatch" style="background:var(${v})"></i>${n} ${k}</span>`).join('');
+    $('counts').innerHTML = `<b>${c.total} agent${c.total === 1 ? '' : 's'}</b>`
+     + board.filter((s) => s.ids.length)
+        .map((s) => `<span><i class="swatch" style="background:var(--${esc(s.tone)})"></i>${s.ids.length} ${esc(s.label)}</span>`).join('')
+     // Measured 2026-09-01: four agents had the same folder (logistics-T4) and the map showed
+     // it nowhere, because cards are grouped by Herdr window and the four sat in four boxes.
+     // It is a standing condition, not an event, and the cards already carry the ⚠ — so it is
+     // a chip on this line rather than a band of its own, with the sentence in its tooltip.
+     + (shared.length ? `<span class="tag warn" title="Two agents writing to the same files at
+        once can undo each other's work. The cards in those folders are marked ⚠.">⚠ ${shared.length}
+        folder${shared.length === 1 ? '' : 's'} shared</span>` : '')
+     // What to do with them, beside the count of them. This used to sit in the page footer,
+     // measured at y=1570 on a 900px screen — below every card and below the button that
+     // closes every agent, so the one sentence explaining how to connect agents was never read.
+     + '<span class="how">Click one to read and answer it · drag the dot on its edge onto another to connect them</span>';
 
-    // Above this many agents the map no longer fits on one screen, so the "needs you" lane
-    // starts earning its place instead of repeating a card you can already see.
-    document.body.classList.toggle('crowded', c.total > 8);
-    const needs = $('needs');
-    if (model.needsYou.length) {
-      needs.hidden = false;
-      $('needs-cards').innerHTML = model.needsYou.map((n) => `
-        <div class="need ${n.status === 'done' ? 'done' : ''}" role="button" tabindex="0" data-pane="${esc(n.paneId)}" data-label="${esc(n.label)}" data-cwd="${esc(n.cwd ?? '')}">
-          <div class="who">${esc(n.label)}</div>
-          <div class="meta">${esc(n.workspaceLabel)}</div>
-          <span class="tag ${STATUS[n.status].cls}">${n.status === 'blocked' ? 'Wants input' : STATUS.done.label}</span>
-        </div>`).join('');
-    } else { needs.hidden = true; }
+    sharedBy = new Map(shared.flatMap((f) =>
+      f.agents.map((a) => [a.id, f.agents.filter((o) => o.id !== a.id).map((o) => o.label)])));
+
+    // The separate "needs you" lane is gone from the markup. It existed because cards were
+    // grouped by window and the ones wanting an answer were scattered; the first column now IS
+    // that lane, so keeping both drew every waiting agent twice. It was left hidden rather than
+    // removed, and its <h2> still sat between the page's h1 and the columns' h3s in the
+    // document — a heading level for a section nobody can see (axe heading-order, 2026-09-02).
 
     const anyAgents = c.total > 0 || model.workspaces.some(w => w.tabs.some(t => t.panes.length));
     if (!anyAgents) {
@@ -351,31 +496,121 @@
       drawLinks();
       return;
     }
-    $('workspaces').innerHTML = model.workspaces.map((w) => `
-      <section class="ws ${agentsIn(w) >= 3 ? 'busy' : ''}">
-        <div class="ws-head">
-          ${w.focused ? '<span class="focus-star" title="This workspace is focused in Herdr">★</span>' : ''}
-          <h3 title="${esc(w.label)}">${esc(w.label)}</h3>
-          <span class="badge">${agentsIn(w) ? `${agentsIn(w)} agent${agentsIn(w) === 1 ? '' : 's'}` : shellsIn(w) ? `${shellsIn(w)} shell${shellsIn(w) === 1 ? '' : 's'}` : 'empty'}</span>
-          ${agentsIn(w) ? `<button class="btn"
-            data-close-ws="${esc(w.id)}" data-n="${agentsIn(w)}" data-label="${esc(w.label)}"
-            >Close ${agentsIn(w)}</button>` : ''}
+    // ── The board ──
+    // One column per state, in the order config.json lists them, and a card sits in one because
+    // of what Herdr reports about it — never because anything put it there. The columns, their
+    // wording and their colours all arrive from the server (src/state.mjs); nothing is decided
+    // here, so the board cannot disagree with the terminal.
+    //
+    // This replaced one box per Herdr *window* — a grouping that came from the accident of how
+    // the terminals were opened. Measured 2026-09-02: one folder was drawn as five boxes named
+    // "logistics-T4 Qs", "logistics-T4 (3)", "featsLogi-Add" and so on, and the agents actually
+    // waiting for an answer were scattered across all five.
+    const paneById = new Map(model.workspaces.flatMap((w) =>
+      w.tabs.flatMap((t) => t.panes.map((p) => [p.id, p]))));
+    // A shell is not an agent, so no state describes it. It keeps its own quiet row rather than
+    // being forced into a column where the word on the heading would not be true of it.
+    const shells = [...paneById.values()].filter((p) => !p.isAgent);
+
+    // Width is earned, not equal. A column with nine agents in it and a column with one do not
+    // want the same width: the busy one turns into a long scroll and the quiet one is mostly
+    // empty. Each column gets a number of lanes worked out from how many cards it holds (the
+    // sums are in src/state.mjs, the numbers in config.json), and its cards spread across them.
+    const width = board.map((c) => c.lanes ?? 1);
+    // An empty column is a slim tab, not a lane: it still says its name, so "nothing needs
+    // you" is read, but the width goes to the columns with cards in them.
+    const tracks = board.map((c, i) => (c.ids.length ? `minmax(0,${width[i]}fr)` : 'auto')).join(' ');
+
+    morphBoard($('workspaces'), `<div class="board" style="grid-template-columns:${tracks}">${board.map((col, i) => `
+      <section class="col tone-${esc(col.tone)} ${col.ids.length ? '' : 'col-empty'}" data-col="${esc(col.id)}" style="--w:${width[i]}">
+        <div class="col-head">
+          <i class="swatch" style="background:var(--${esc(col.tone)})"></i>
+          <h2>${esc(col.label)}</h2>
+          <span class="badge">${col.ids.length}</span>
         </div>
-        <div class="tabs">
-          ${w.tabs.map((t) => `
-            <div class="tab-group">
-              <div class="tab-label">${esc(t.label)}</div>
-              <div class="panes">${t.panes.map(card).join('')}</div>
-            </div>`).join('')}
-        </div>
-      </section>`).join('');
-    drawLinks();          // the cards were just rebuilt, so the lines between them move too
+        <p class="col-why">${esc(col.blurb ?? '')}</p>
+        ${col.ids.length
+          ? `<div class="panes">${col.ids.map((id) => card(paneById.get(id))).join('')}</div>`
+          // An empty column is an answer, not a gap: "nothing needs you" is the thing you opened
+          // the page to find out. A blank space instead reads as something that failed to load.
+          : '<p class="col-none">Nobody here.</p>'}
+      </section>`).join('')}</div>
+      ${shells.length ? `<section class="col shells" data-col="__shells">
+        <div class="col-head"><i class="swatch" style="background:var(--unknown)"></i>
+          <h2>Terminals</h2><span class="badge">${shells.length}</span></div>
+        <p class="col-why">Open, with no agent running in them.</p>
+        <div class="panes">${shells.map(card).join('')}</div>
+      </section>` : ''}`);
+    drawLinks();          // any card that moved takes the lines drawn to it along
+    paintOrg();           // and the hierarchy, if it is open, is the same agents in another shape
   }
+
+  /* ── Agents stopped on the same question ──
+     Reading each screen costs a call per agent, so it runs on its own slower clock than the
+     map. Each button says how many agents it answers, and pressing one walks every one of
+     them to that answer on its own screen — the same answer can be a different row on each. */
+  let waitingSig = '';
+  function renderWaiting(waiting) {
+    const bar = $('waiting');
+    // Same answer as last scan: leave the bar alone, so a button you are about to press
+    // is not rebuilt under the pointer.
+    const sig = JSON.stringify(waiting);
+    if (sig === waitingSig) return;
+    waitingSig = sig;
+    if (!waiting.length) { bar.hidden = true; bar.innerHTML = ''; return; }
+    bar.hidden = false;
+    bar.innerHTML = waiting.map((w) => {
+      const n = w.agents.length;
+      const who = w.agents.map((a) => esc(a.label)).join(' · ');
+      return `<div class="wait-row" data-prompt="${esc(w.id)}">
+        <p class="wait-sum"><b>${n} agent${n === 1 ? ' is' : 's are'}</b> waiting on the same question — ${esc(w.title)}</p>
+        <div class="wait-picks">
+          ${w.choices.map((c, i) => `<button class="btn ${i === 0 ? 'primary' : ''}"
+            data-answer="${esc(c.id)}" data-label="${esc(c.label)}" data-count="${c.count}"
+            >${esc(c.label)} <small>· all ${c.count}</small></button>`).join('')}
+        </div>
+        <p class="wait-who">${who}</p>
+      </div>`;
+    }).join('');
+  }
+
+  async function scanPrompts() {
+    if (document.hidden) return;
+    const r = await get('/api/prompts');
+    if (r.ok) renderWaiting(r.waiting);
+  }
+
+  $('waiting').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-answer]');
+    if (!btn) return;
+    const row = btn.closest('[data-prompt]');
+    // One click here types an answer into several live agents at once — the same weight as
+    // sending one job to a connected group, so it asks in the same way, and names both the
+    // words being sent and how many agents will get them.
+    const n = Number(btn.dataset.count);
+    if (!confirmOnce(`Answer “${btn.dataset.label}” on ${n} agent${n === 1 ? '' : 's'} now? Each one is typed into that agent's own screen.`)) return;
+    for (const b of row.querySelectorAll('[data-answer]')) b.disabled = true;
+    headMsg('Answering…', { bad: false });
+    // The number just agreed to travels with the request, exactly as closing's does: the server
+    // looks again and answers nobody if more agents have arrived on the question since.
+    const r = await post('/api/prompts/answer',
+      { promptId: row.dataset.prompt, choiceId: btn.dataset.answer, expect: n });
+    // An agent that would not take the answer is still sitting on the question, so that stays
+    // up. Only a run where every agent took it is allowed to clear itself.
+    headMsg(r.ok
+      ? (r.failed
+        ? `Answered ${r.answered} · ${r.failed} would not take it and ${r.failed === 1 ? 'is' : 'are'} still on the question.`
+        : `Answered ${r.answered}.`)
+      : r.error, { bad: !r.ok || !!r.failed, forMs: 6000 });
+    setTimeout(scanPrompts, 900);
+    tick();
+  });
 
   const emptyState = () => `<div class="state">
     <div class="display">Your workspace is quiet</div>
     <p>Herdr is connected, but no agents are running yet.</p>
     <p class="hint">Open Herdr, type <b>claude</b> in a pane, and this map fills in on its own — no refresh.</p>
+    <button class="btn" data-help>Show me how this page works</button>
   </div>`;
 
   const errorState = (msg) => `<div class="state">
@@ -388,16 +623,35 @@
 
   $('state').innerHTML = loadingState();
 
+  let lastDrawnSig = '';   // what the last drawn board was made of, so an unchanged poll draws nothing
+
   async function tick() {
     const data = await get('/api/snapshot');
     if (!data.ok) { setLive(false, 'offline'); renderState(errorState(data.error)); return; }
     setLive(true, 'live');
-    render(data.model);
+    /* ── Only redraw when something actually changed ──
+       The map is read every 1.5s and the whole board used to be rebuilt each time, whether
+       anything had moved or not. Every card was destroyed and remade forty times a minute, so
+       the page visibly flickered while you were reading it, and anything mid-gesture — a hover,
+       a half-drawn line — was thrown away with it.
+       The signature is everything the drawing depends on, plus which minute it is: the cards
+       say how long an agent has been in its state, so a still board still refreshes once a
+       minute rather than never. */
+    const sig = JSON.stringify([
+      data.board, data.shared,
+      data.model.workspaces.map((w) => [w.id, w.label, w.focused, w.tabs.map((t) => [t.id, t.label,
+        t.panes.map((p) => [p.id, p.label, p.title, p.status, p.cwd, p.isAgent, p.focused])])]),
+    ]);
+    if (sig === lastDrawnSig) return;
+    lastDrawnSig = sig;
+    render(data.model, data.shared ?? [], data.board ?? []);
   }
 
   await tick();
   setInterval(tick, pollMs);
-  window.addEventListener('focus', tick);
+  await scanPrompts();
+  setInterval(scanPrompts, promptScanMs);
+  window.addEventListener('focus', () => { tick(); scanPrompts(); });
 </script>
 </body>
 </html>

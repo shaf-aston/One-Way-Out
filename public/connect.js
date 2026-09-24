@@ -4,8 +4,8 @@
 // connection means at the spot you dropped it — there is no mode to remember and nowhere
 // else to go. The lines themselves live in wires.js; this file is only how you draw them
 // and the bar that acts on them.
-import { $, esc, autoGrow, confirmOnce, headMsg } from './ui.js';
-import { addWire, wires, removeWire, setWireKind, clearWires, kindList, groupCount, sendJob, loadKinds } from './wires.js';
+import { $, esc, autoGrow, confirmOnce, headMsg, menuAt } from './ui.js';
+import { onWiresSaved, addWire, wires, removeWire, setWireKind, clearWires, kindList, groupCount, sendJob, refreshWires, sendOutcome, loadKinds, loadWires } from './wires.js';
 
 /* ── Connect agents on the map, without going anywhere ──
    Every agent card has a dot on its edge. Drag it to another agent — or click it, then
@@ -14,11 +14,20 @@ import { addWire, wires, removeWire, setWireKind, clearWires, kindList, groupCou
    There is no mode to remember and nowhere else to go: this page is the only place agents
    are connected. Click a line's label to change what it means or remove it. */
 let wiring = null;                       // { from, x, y, dragging }
+let lastDrawn = '';                      // what the lines looked like last pass, to know when they settle
 
 /** Is a line half-drawn right now? A card click means "finish it", not "open the agent". */
 export const isWiring = () => !!wiring;
 
-const cardEl = (id) => document.querySelector(`.card[data-pane="${CSS.escape(id)}"]`);
+/**
+ * The card standing for an agent right now. While a view is open the map is only a narrow
+ * rail, so lines are drawn between the cards INSIDE that view — which is how the org chart
+ * gets its arrows without a second drawing implementation. A view with no agent cards of its
+ * own (workflows) therefore draws nothing, exactly as before.
+ */
+const inView = () => document.body.classList.contains('in-view');
+const cardEl = (id) => document.querySelector(
+  `${inView() ? '#view-slot ' : ''}.card[data-pane="${CSS.escape(id)}"]`);
 const nameOf = (id) => cardEl(id)?.dataset.label ?? id;
 
 /** Where a line leaves a card: the middle of whichever side faces the other end. */
@@ -39,26 +48,36 @@ export function drawLinks() {
   const curve = (a, b) => `M${a.x},${a.y} C${(a.x + b.x) / 2},${a.y} ${(a.x + b.x) / 2},${b.y} ${b.x},${b.y}`;
   const arrow = ' marker-end="url(#head)"';
   const parts = [];
+  // Each meaning draws in its own colour, and a leader's line also carries a small head
+  // pointing back — the work goes down it, the answer comes back up it.
+  const HEAD = { manages: 'lead', handoff: 'flow', parallel: 'peer', colleague: 'peer' };
+  const ends = (kind) => ` marker-end="url(#head-${HEAD[kind] ?? 'peer'})"`
+    + (kind === 'manages' ? ' marker-start="url(#tail-lead)"' : '');
 
-  // A view fills the page and the map is a rail beside it — the cards there are too small
-  // to carry lines, so none are drawn until you are back on the map.
-  if (!document.body.classList.contains('in-view')) {
-    for (const w of wires()) {
-      const ra = box(w.from), rb = box(w.to);
-      if (!ra || !rb) continue;             // one end is not on screen: draw nothing rather than a lie
-      const a = edge(ra, mid(rb)), b = edge(rb, mid(ra));
-      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2 - 7;
-      // Both handles are real buttons: a line drawn with the mouse is still changeable
-      // and removable from the keyboard.
-      const names = `${nameOf(w.from)} to ${nameOf(w.to)}`;
-      parts.push(`<g><path d="${curve(a, b)}"${arrow}/>
-        <text x="${mx}" y="${my}" text-anchor="middle" role="button" tabindex="0" data-wire="${w.i}"
-          aria-label="${esc(w.label)}: ${esc(names)}. Change or remove this connection"><title>Change or remove this connection</title>${esc(w.label)}</text></g>`);
-    }
+  for (const w of wires()) {
+    const ra = box(w.from), rb = box(w.to);
+    if (!ra || !rb) continue;             // one end is not on screen: draw nothing rather than a lie
+    const a = edge(ra, mid(rb)), b = edge(rb, mid(ra));
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2 - 7;
+    // Both handles are real buttons: a line drawn with the mouse is still changeable
+    // and removable from the keyboard.
+    const names = `${nameOf(w.from)} to ${nameOf(w.to)}`;
+    parts.push(`<g class="k-${esc(w.kind)}"><path d="${curve(a, b)}"${ends(w.kind)}/>
+      <text x="${mx}" y="${my}" text-anchor="middle" role="button" tabindex="0" data-wire="${w.i}"
+        aria-label="${esc(w.label)}: ${esc(names)}. Change or remove this connection"><title>Change or remove this connection</title>${esc(w.label)}</text></g>`);
   }
   const ra = wiring && box(wiring.from);
   if (ra) parts.push(`<g class="ghost"><path d="${curve(edge(ra, wiring), wiring)}"${arrow}/></g>`);
-  svg.innerHTML = parts.join('');
+  const drawn = parts.join('');
+  svg.innerHTML = drawn;
+  /* Look again on the next frame. A repaint of the map can move a card after this ran, and a
+     line one layout behind points at empty space rather than at the agent it names. Comparing
+     what was drawn is what ends it: as soon as two passes agree, nothing more is scheduled. */
+  if (drawn !== lastDrawn) { lastDrawn = drawn; requestAnimationFrame(drawLinks); }
+  // In the hierarchy the legend already says what each colour means, so repeating it on every
+  // arrow turns the chart into a wall of words. The labels stay — they are how a single line is
+  // changed or removed — but they only show when you point at or Tab to one.
+  svg.parentElement.classList.toggle('quiet', !!document.querySelector('.org'));
   paintWired();
 }
 
@@ -82,6 +101,9 @@ const stopWiring = () => { wiring = null; document.body.classList.remove('wiring
 function joinTo(to, at) {
   const from = wiring?.from;
   stopWiring();
+  // Clearing comes first: giving up on a line has to take away the line that told you how to
+  // finish it, and clicking the background lands here with no target at all.
+  headMsg('');
   if (!to || !from) return;
   if (from === to) return headMsg('Connect it to a different agent.');
   headMsg('');
@@ -110,31 +132,12 @@ export function finishFromKeyboard(to) {
  * @param {() => void} [onDrop] - if given, the menu also offers to remove the line
  */
 function askKind(at, title, pick, onDrop) {
-  document.querySelector('.kind-menu')?.remove();
   const kinds = kindList();
   if (!kinds.length) return pick('manages');    // the server has not answered yet: use the safe one
-  const m = document.createElement('div');
-  m.className = 'kind-menu';
-  m.setAttribute('role', 'menu');
-  m.setAttribute('aria-label', title);
-  m.innerHTML = kinds.map((k) => `<button role="menuitem" data-pick="${esc(k.key)}">${esc(k.label)}<small>${esc(k.blurb)}</small></button>`).join('')
-    + (onDrop ? '<button role="menuitem" class="drop" data-pick="">Remove this connection</button>' : '');
-  document.body.appendChild(m);
-  // Keep it on screen: a menu opened near the right or bottom edge flips back inside.
-  const r = m.getBoundingClientRect();
-  m.style.left = `${Math.max(8, Math.min(at.x, innerWidth - r.width - 8))}px`;
-  m.style.top = `${Math.max(8, Math.min(at.y, innerHeight - r.height - 8))}px`;
-  m.querySelector('button').focus();
-  const shut = () => { m.remove(); removeEventListener('pointerdown', away, true); };
-  const away = (e) => { if (!e.target.closest('.kind-menu')) shut(); };
-  setTimeout(() => addEventListener('pointerdown', away, true));
-  m.addEventListener('keydown', (e) => { if (e.key === 'Escape') { shut(); headMsg(''); } });
-  m.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-pick]');
-    if (!b) return;
-    shut();
-    b.dataset.pick ? pick(b.dataset.pick) : onDrop();
-  });
+  menuAt(at, title, [
+    ...kinds.map((k) => ({ key: k.key, label: k.label, blurb: k.blurb })),
+    onDrop ? { key: '', label: 'Remove this connection', cls: 'drop' } : null,
+  ], (key) => (key ? pick(key) : onDrop()));
 }
 
 document.addEventListener('pointerdown', (e) => {
@@ -166,6 +169,24 @@ document.addEventListener('pointerdown', (e) => {
   drawLinks();
 });
 
+/**
+ * Arm a connection from the keyboard: focus a port, press Enter or Space, then Tab to the
+ * agent it should join and press Enter or Space again — the same finish `watchCards` already
+ * wires up for a card. Mirrors the "armed, not dragging" state a mouse click leaves behind,
+ * so both paths join at the same place.
+ */
+document.addEventListener('keydown', (e) => {
+  const port = e.target.closest('[data-port]');
+  if (!port || (e.key !== 'Enter' && e.key !== ' ')) return;
+  e.preventDefault();
+  const r = port.getBoundingClientRect();
+  wiring = { from: port.dataset.port, x: r.left, y: r.top + r.height / 2, dragging: false };
+  document.body.classList.add('wiring');
+  // Telling you what to do next is not a problem, and a problem is what sticks the header.
+  headMsg(`Connecting ${nameOf(wiring.from)}… Tab to the other agent and press Enter.`, { bad: false });
+  drawLinks();
+});
+
 // While a line is armed it follows the pointer, and the next click lands it.
 document.addEventListener('pointermove', (e) => {
   if (!wiring || wiring.dragging) return;
@@ -180,7 +201,7 @@ document.addEventListener('click', (e) => {
   e.preventDefault();
   joinTo(to, { x: e.clientX, y: e.clientY });
 }, true);
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && wiring) stopWiring(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && wiring) { stopWiring(); headMsg(''); } });
 
 // A line's own label: the same menu, now also offering to remove it.
 const onLink = (e) => {
@@ -210,18 +231,45 @@ $('wired-send').addEventListener('click', async () => {
   const box = $('wired-task');
   const task = box.value.trim();
   if (!task) return headMsg('Type the job first.');
+  // Ask Herdr who is still there before asking him. A line is stored against two conversations
+  // and turned into two pane ids when it is read back; the copy held here was turned into pane
+  // ids once, when the page loaded, and a moved or closed agent hands its pane to the next one
+  // along. So the lines are refreshed first, and the number in the question is then the number
+  // of jobs that actually go out.
+  const fresh = await refreshWires();
+  if (!fresh.ok) return headMsg(fresh.error);
   const g = groupCount();
   if (!confirmOnce(`Send this job to ${g} connected ${g === 1 ? 'group' : 'groups'} of agents now?`)) return;
-  headMsg('Sending…');
+  headMsg('Sending…', { bad: false });
   const r = await sendJob(task);
   if (!r.ok) return headMsg(r.error);
   box.value = '';
   autoGrow(box);
-  headMsg('');
-  $('wired-sum').textContent = `Sent to ${r.sent} agent${r.sent === 1 ? '' : 's'}.`
-    + (r.gone ? ` ${r.gone} connected agent${r.gone === 1 ? ' is' : 's are'} no longer running.` : '');
+  // `r.failed` — agents that refused the job — was arriving from the server and being thrown
+  // away here, so a partly-delivered job read as a clean one.
+  const out = sendOutcome(r);
+  $('wired-sum').textContent = out.text;
+  headMsg(out.problem);
 });
 
 addEventListener('resize', drawLinks);
 addEventListener('scroll', drawLinks, true);
-loadKinds().then(drawLinks);
+
+/* ── Redraw whenever a card could have moved ──
+   A line is drawn from where the cards ARE at that instant, so anything that moves one has to
+   redraw it. The window resizing and the page scrolling were already covered; a column getting
+   taller was not. That did not matter while every card sat in one fixed grid. It matters now
+   that the columns are different heights, because a single card arriving or leaving shifts
+   every card below it — measured 2026-09-02: cards at y=637 with the line still drawn at
+   y=556, both ends floating in the gap between two cards, pointing at nothing.
+   The observer sees a column change size; the frame check inside drawLinks catches cards that
+   moved without anything changing size at all. */
+if (typeof ResizeObserver !== 'undefined') {
+  const watch = new ResizeObserver(() => drawLinks());
+  const board = document.getElementById('workspaces');
+  if (board) watch.observe(board);
+}
+
+// The kinds first, then last time's lines: a line needs its kind's words before it can be drawn.
+onWiresSaved(paintWired);            // the group count lands a moment after the line does
+loadKinds().then(loadWires).then(drawLinks);

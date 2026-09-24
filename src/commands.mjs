@@ -67,7 +67,7 @@ async function fromSkills(dir, source) {
 }
 
 /** True when `cwd` is a usable absolute directory path (trust boundary for the ?cwd= param). */
-export async function isUsableDir(cwd) {
+async function isUsableDir(cwd) {
   if (typeof cwd !== 'string' || !cwd || !path.isAbsolute(cwd) || cwd.includes('\0')) return false;
   try { return (await stat(cwd)).isDirectory(); } catch { return false; }
 }
