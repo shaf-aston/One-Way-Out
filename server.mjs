@@ -20,8 +20,10 @@ import { exactLabel } from './public/menu.js';
 import { answerMenu } from './src/answer.mjs';
 import { readImage, IMAGE_LIMITS } from './src/image.mjs';
 import { SETTINGS, readSettings, patchSettings } from './src/herdrsettings.mjs';
-import { validateCompany, patchCompany, validateEmployee, validateGoal, validateRoutine, exportBundle, importBundle, text } from './src/company.mjs';
-import { validateIssue, issueKey } from './src/issues.mjs';
+import { validateCompany, patchCompany, validateEmployee, validateGoal, validateRoutine, exportBundle, importBundle, text, MODELS, EMPLOYEE_STATES } from './src/company.mjs';
+import { validateIssue, issueKey, STATUSES, PRIORITIES, lanesClash } from './src/issues.mjs';
+import { budgetBars, overBudget } from './src/budget.mjs';
+import { describeSchedule } from './src/schedule.mjs';
 import { applyApproval, DEFAULT_LIMITS } from './src/heartbeat.mjs';
 import { entry, filterActivity } from './src/activity.mjs';
 import { TEMPLATES } from './src/templates.mjs';
@@ -204,8 +206,16 @@ async function companyView(cid) {
   const model = snap.ok ? buildModel(snap.snapshot) : null;
   const { panes } = model ? matchPanes(model, state.employees) : { panes: {} };
   const activity = filterActivity(await readActivity(companiesDir, cid), { limit: 80 });
+  const now = Date.now();
   return {
     ...state,
+    // What each budget bar shows, and the words for everything the pages offer — worked out
+    // here, once, so the page never keeps a second copy of a rule.
+    employees: state.employees.map((e) => ({ ...e, bars: budgetBars(e, now), over: overBudget(e, now)?.words ?? null })),
+    routines: state.routines.map((r) => ({ ...r, when: describeSchedule(r.schedule) })),
+    clashes: lanesClash(state.issues),
+    vocab: { statuses: STATUSES, priorities: PRIORITIES, models: MODELS, employeeStates: EMPLOYEE_STATES },
+    tickMs: beat.tickMs,
     live: Object.fromEntries(Object.entries(panes).map(([id, p]) => [id, p ? { paneId: p.paneId, status: p.status } : null])),
     herdr: snap.ok ? 'ok' : snap.error,
     unhired: model ? unhired(model, state.employees) : [],
@@ -221,10 +231,11 @@ async function mutate(res, cid, body, change) {
       if (r.error) return { result: r };
       return { state, log: r.log ?? [], result: r };
     });
-    if (out?.error) return fail(res, out.error, 400);
-    if (out?.wake) soon(cid);
-    if (out?.after) await out.after();
-    return ok(res, out?.result ?? {});
+    const { error, wake, after, log, ...data } = out ?? {};
+    if (error) return fail(res, error, 400);
+    if (wake) soon(cid);
+    if (after) await after();
+    return ok(res, data);
   } catch (e) {
     return fail(res, e.message || e, 404);
   }

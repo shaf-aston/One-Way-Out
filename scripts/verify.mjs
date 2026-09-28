@@ -302,20 +302,18 @@ assert.equal(readMode(['auto mode on', ...Array(9).fill('later output')].join('\
   'a mode named far up the transcript is history, not the mode it is in now');
 
 /* ── the address bar is the app's state ── */
-const VIEWS = ['sessions', 'flows'];
-assert.deepEqual(parseHash('#/flows', VIEWS), { view: 'flows', arg: null });
-assert.deepEqual(parseHash('#/board', VIEWS), { view: 'sessions', arg: null },
-  'the old Board link lands on the map, which is where connecting now happens');
-assert.deepEqual(parseHash('#/flows/flow%20one', VIEWS), { view: 'flows', arg: 'flow one' },
+const VIEWS = ['dashboard', 'issues'];
+assert.deepEqual(parseHash('#/issues', VIEWS), { view: 'issues', arg: null });
+assert.deepEqual(parseHash('#/flows', VIEWS), { view: 'dashboard', arg: null },
+  'an old Workflows link lands on the dashboard, not a blank screen');
+assert.deepEqual(parseHash('#/issues/acme%201', VIEWS), { view: 'issues', arg: 'acme 1' },
   'a name with a space survives the round trip through the URL');
-assert.deepEqual(parseHash('', VIEWS), { view: 'sessions', arg: null }, 'no hash means the map');
-assert.deepEqual(parseHash('#/nonsense', VIEWS), { view: 'sessions', arg: null },
-  'an unknown link lands on the map instead of a blank screen');
-assert.deepEqual(parseHash('#/flows/%E0%A4%A', VIEWS), { view: 'flows', arg: '%E0%A4%A' },
+assert.deepEqual(parseHash('', VIEWS), { view: 'dashboard', arg: null }, 'no hash means home');
+assert.deepEqual(parseHash('#/issues/%E0%A4%A', VIEWS), { view: 'issues', arg: '%E0%A4%A' },
   'a hand-mangled percent-code must not crash the router — the raw text is kept');
-assert.equal(linkTo('sessions'), '#/');
-assert.equal(linkTo('flows', 'flow one'), '#/flows/flow%20one');
-assert.deepEqual(parseHash(linkTo('flows', 'a/b'), VIEWS), { view: 'flows', arg: 'a/b' },
+assert.equal(linkTo('dashboard'), '#/');
+assert.equal(linkTo('issues', 'acme 1'), '#/issues/acme%201');
+assert.deepEqual(parseHash(linkTo('issues', 'a/b'), VIEWS), { view: 'issues', arg: 'a/b' },
   'a slash inside a name does not split into a second route segment');
 
 // ── Folders offered when starting an agent ──
@@ -899,6 +897,7 @@ const i3 = mk({ title: 'Loose idea' });
 assert.equal(issueKey(co, i2), 'ACME-2');
 assert.equal(i1.status, 'todo', 'assigned means ready');
 assert.equal(i3.status, 'backlog', 'unassigned waits in the backlog');
+assert.equal(validateIssue({ assignee: 'ada' }, ctx, i3).issue.status, 'todo', 'assigning a backlog issue makes it ready');
 assert.equal(validateIssue({ title: 'x', assignee: 'ghost' }, ctx).ok, false);
 assert.deepEqual(readyFor('ada', ctx.issues).map((i) => i.id), [i1.id], 'blocked work waits even when it is more urgent');
 i1.status = 'in_progress';

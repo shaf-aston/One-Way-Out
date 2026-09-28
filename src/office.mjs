@@ -2,6 +2,7 @@
 // running and what they are doing, lets src/heartbeat.mjs decide, saves that, and then does
 // what was decided — starting agents and typing briefs into them. It reaches Herdr only through
 // src/herdr.mjs, and decides nothing itself.
+import { mkdir } from 'node:fs/promises';
 import { getSnapshot, readPane, runInPane, sendKeys, startAgent, movePane, closePane } from './herdr.mjs';
 import { buildModel, listAgents } from './model.mjs';
 import { startPlan, moveArgs } from './moves.mjs';
@@ -178,6 +179,8 @@ export function createOffice({ bin, root, limits = {}, agentCommand = 'claude', 
         return { state: decided.state, log: decided.log };
       });
       if (!decided || dry) return decided ?? null;
+      // Agents are told to write here, so it must exist before anyone is briefed.
+      if (decided.effects.length) await mkdir(paths.dir, { recursive: true });
       for (const effect of decided.effects) carryOut(cid, effect, ctx).catch((e) => log(`effect failed: ${e.message || e}`));
       return decided;
     } finally {

@@ -68,18 +68,86 @@ export async function post(path, body) {
 }
 
 /**
- * Ask before anything that reaches a live agent. One place, so every such action asks the
- * same way — and so there is exactly one line to change if this ever becomes a real dialog.
+ * The one synchronous "are you sure" — kept only where the answer must come back before the
+ * caller returns (closing the agent viewer over a half-typed reply). Everything else uses ask().
  */
 export const confirmOnce = (question) => window.confirm(question);
 
 /**
- * Guard every exit from a panel you have typed into. Losing a half-written job because you
- * clicked the backdrop is the single easiest way to make someone distrust an app.
- * @param {boolean} dirty - is there work on screen that is not saved or sent?
+ * A dialog drawn in the page's own style: a title, a body (usually a form), and buttons.
+ * Resolves with the button pressed and every named field's value, or null if dismissed.
+ * One place, so every form and every "are you sure" in the app looks and behaves the same:
+ * Escape or a click outside cancels, Enter in a single-line field presses the first button.
+ * @param {{title:string, body?:string, actions?:Array<{act:string,label:string,primary?:boolean,danger?:boolean}>, wide?:boolean}} spec
+ * @returns {Promise<{act:string, values:Record<string,any>}|null>}
  */
-export const okToDiscard = (dirty, what = 'what you typed') =>
-  !dirty || window.confirm(`Throw away ${what}?`);
+export function dialog({ title, body = '', actions = [{ act: 'ok', label: 'OK', primary: true }], wide = false }) {
+  return new Promise((resolve) => {
+    const ov = document.createElement('div');
+    ov.className = 'overlay dialog-overlay';
+    ov.innerHTML = `<form class="sheet dialog ${wide ? 'wide' : ''}" method="dialog" novalidate>
+      <div class="sheet-head"><h3 class="display">${esc(title)}</h3></div>
+      <div class="dialog-body">${body}</div>
+      <p class="bad-note" data-err hidden></p>
+      <div class="dialog-foot">
+        <button type="button" class="btn" data-act="cancel">Cancel</button>
+        ${actions.map((a) => `<button type="${a.primary ? 'submit' : 'button'}" class="btn ${a.primary ? 'primary' : ''} ${a.danger ? 'danger' : ''}"
+          data-act="${esc(a.act)}">${esc(a.label)}</button>`).join('')}
+      </div>
+    </form>`;
+    document.body.appendChild(ov);
+    const form = ov.querySelector('form');
+    const values = () => {
+      const out = {};
+      for (const el of form.querySelectorAll('[name]')) {
+        if (el.type === 'checkbox') out[el.name] = el.checked;
+        else if (el.multiple) out[el.name] = [...el.selectedOptions].map((o) => o.value);
+        else out[el.name] = el.value;
+      }
+      return out;
+    };
+    const done = (v) => { ov.remove(); document.removeEventListener('keydown', onKey, true); resolve(v); };
+    const onKey = (e) => { if (e.key === 'Escape' && document.body.lastElementChild === ov) { e.stopPropagation(); done(null); } };
+    document.addEventListener('keydown', onKey, true);
+    ov.addEventListener('mousedown', (e) => { if (e.target === ov) done(null); });
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const primary = actions.find((a) => a.primary);
+      done({ act: e.submitter?.dataset.act ?? primary?.act ?? 'ok', values: values() });
+    });
+    form.addEventListener('click', (e) => {
+      const b = e.target.closest('button[type="button"][data-act]');
+      if (!b) return;
+      done(b.dataset.act === 'cancel' ? null : { act: b.dataset.act, values: values() });
+    });
+    (form.querySelector('[autofocus]') ?? form.querySelector('input, textarea, select') ?? form.querySelector('[type="submit"]'))?.focus();
+  });
+}
+
+/**
+ * Ask before anything that reaches a live agent or cannot be undone. Resolves true or false.
+ * The yes-button says what will happen, so the answer is a choice, not a reflex.
+ */
+export async function ask(question, { yes = 'Yes', danger = false, detail = '' } = {}) {
+  const r = await dialog({ title: question, body: detail ? `<p class="muted-note">${esc(detail)}</p>` : '',
+    actions: [{ act: 'yes', label: yes, primary: true, danger }] });
+  return r?.act === 'yes';
+}
+
+/** "3m ago", "2h ago", "yesterday" — how long since `at`. */
+export function ago(at, now = Date.now()) {
+  if (!at) return '';
+  const s = Math.max(0, Math.round((now - at) / 1000));
+  if (s < 45) return 'just now';
+  if (s < 3600) return `${Math.round(s / 60)}m ago`;
+  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
+  if (s < 172800) return 'yesterday';
+  return new Date(at).toLocaleDateString();
+}
+
+/** One <option> list, with `selected` on the one that matches. */
+export const options = (rows, selected) => rows.map(([v, label]) =>
+  `<option value="${esc(v)}" ${String(v) === String(selected ?? '') ? 'selected' : ''}>${esc(label)}</option>`).join('');
 
 /**
  * A small menu at a point on screen. The one menu this app has: connecting agents and moving

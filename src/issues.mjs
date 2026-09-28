@@ -46,7 +46,10 @@ export function validateIssue(input, { company, issues = [], employees = [], goa
   const blockedBy = input?.blockedBy !== undefined
     ? cleanList(input.blockedBy, 49, MAX_BLOCKERS).filter((b) => b !== existing?.id && issues.some((i) => i.id === b))
     : existing?.blockedBy ?? [];
-  const status = STATUS_IDS.has(input?.status) ? input.status : existing?.status ?? (assignee ? 'todo' : 'backlog');
+  // Giving a backlog issue an assignee is what makes it ready — it should not need a second step.
+  const assigned = existing?.status === 'backlog' && assignee && !existing.assignee;
+  const status = STATUS_IDS.has(input?.status) ? input.status
+    : assigned ? 'todo' : existing?.status ?? (assignee ? 'todo' : 'backlog');
   const number = existing?.number ?? company?.nextIssue ?? issues.length + 1;
   const issue = {
     id: existing?.id ?? freshId(`${company?.prefix ?? 'co'}-${number}`, issues.map((i) => i.id), 'issue'),
