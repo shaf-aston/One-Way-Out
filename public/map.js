@@ -275,9 +275,8 @@ function render(model, shared = [], board = []) {
    + (shared.length ? `<span class="tag warn" title="Two agents writing to the same files at
       once can undo each other's work. The cards in those folders are marked ⚠.">⚠ ${shared.length}
       folder${shared.length === 1 ? '' : 's'} shared</span>` : '')
-   // What to do with them, beside the count of them. This used to sit in the page footer,
-   // measured at y=1570 on a 900px screen — below every card and below the button that
-   // closes every agent, so the one sentence explaining how to connect agents was never read.
+   // What to do with them, beside the count of them — a sentence in the page footer was
+   // measured at y=1570 on a 900px screen, below every card, and never read.
    + '<span class="how">Click one to read and answer it · employees are tagged with their role</span>';
 
   sharedBy = new Map(shared.flatMap((f) =>
@@ -381,9 +380,8 @@ async function onWaitingClick(e) {
   const btn = e.target.closest('[data-answer]');
   if (!btn) return;
   const row = btn.closest('[data-prompt]');
-  // One click here types an answer into several live agents at once — the same weight as
-  // sending one job to a connected group, so it asks in the same way, and names both the
-  // words being sent and how many agents will get them.
+  // One click here types an answer into several live agents at once, so it asks first, and
+  // names both the words being sent and how many agents will get them.
   const n = Number(btn.dataset.count);
   if (!await ask(`Answer “${btn.dataset.label}” on ${n} agent${n === 1 ? '' : 's'} now?`, { yes: 'Answer all', detail: "Each one is typed into that agent's own screen." })) return;
   for (const b of row.querySelectorAll('[data-answer]')) b.disabled = true;

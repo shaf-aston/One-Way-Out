@@ -88,7 +88,7 @@ export function checkoutProblem(issue, issues = []) {
 const RANK = Object.fromEntries(PRIORITIES.map((p, i) => [p, i]));
 
 /** Has every issue this one waits on been done? */
-export const unblocked = (issue, issues = []) => {
+const unblocked = (issue, issues = []) => {
   const byId = new Map(issues.map((i) => [i.id, i]));
   return (issue.blockedBy ?? []).every((b) => ['done', 'cancelled'].includes(byId.get(b)?.status ?? 'done'));
 };

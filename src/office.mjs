@@ -38,7 +38,7 @@ async function clearTrustPrompt(bin, paneId, waitMs) {
  * the screen can: if our words (or Claude's "[Pasted text" placeholder) are still in the prompt,
  * it was never sent (both measured 2026-08-23).
  */
-export async function deliver(bin, paneId, text, { fresh = false, waitMs = 2000 } = {}) {
+async function deliver(bin, paneId, text, { fresh = false, waitMs = 2000 } = {}) {
   if (fresh) await clearTrustPrompt(bin, paneId, waitMs);
   await runInPane(bin, paneId, text);
   const marker = norm(text).slice(0, 50);

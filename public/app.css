@@ -98,9 +98,8 @@
   .counts .how { color:var(--faint); font-size:.82rem; margin-left:auto; text-transform:none; letter-spacing:0; }
   .swatch { width:9px; height:9px; border-radius:50%; }
 
-  /* Several agents stopped on the same question. Same raised surface as the connections bar,
-     because it is the same kind of thing: one action that lands on many agents at once. It
-     is bordered in the blocked colour, since that is what every card underneath it is. */
+  /* Several agents stopped on the same question: one action that lands on many agents at once.
+     It is bordered in the blocked colour, since that is what every card underneath it is. */
   .waiting {
     margin:0 0 1.6rem; padding:.9rem 1.1rem; border-radius:14px;
     border:1px solid var(--blocked); background:var(--panel-2);
@@ -221,7 +220,7 @@
   .card .top { display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
   .card .name { font-size:.94rem; letter-spacing:.01em; }
   /* The name is the button that opens the agent. Its hit area is stretched over the whole
-     card, so a click anywhere still opens it; the move and connect dots sit above it. */
+     card, so a click anywhere still opens it; the move button sits above it. */
   .card .open { all:unset; cursor:pointer; font:inherit; color:inherit; font-size:.94rem; letter-spacing:.01em; min-width:0; }
   .card .open::after { content:''; position:absolute; inset:0; border-radius:inherit; }
   .card:has(.open:focus-visible) { outline:1px solid var(--gold); outline-offset:2px; }
@@ -253,17 +252,16 @@
   .spin { width:34px; height:34px; margin:0 auto 1.4rem; border-radius:50%; border:2px solid var(--line); border-top-color:var(--gold); animation:spin 1s linear infinite; }
   @keyframes spin { to{transform:rotate(360deg)} }
 
-  /* Move this agent somewhere else in Herdr. Sits opposite the connect dot, appears on the
-     same hover/focus, and stays reachable by keyboard because M does the same thing. */
+  /* Move this agent somewhere else in Herdr. Appears on hover/focus, and stays reachable by
+     keyboard because M does the same thing. */
   .card .mover {
     position:absolute; left:-7px; top:50%; transform:translateY(-50%); padding:0; z-index:3;
     width:17px; height:17px; border-radius:50%; border:1px solid var(--line); background:var(--panel);
     color:var(--muted); font:inherit; font-size:.6rem; line-height:15px; cursor:pointer;
     opacity:0; pointer-events:none; transition:opacity .18s ease, border-color .18s ease, color .18s ease;
   }
-  /* The same 24px target the connect dot already carries. Measured 2026-09-02: the dot's hit
-     area is widened by a pseudo-element and this one's never was, so two controls that look the
-     same size on screen needed very different accuracy to hit. */
+  /* A 24px target, widened by a pseudo-element: at its drawn 17px it needed too much accuracy
+     to hit (measured 2026-09-02). */
   .card .mover::after { content:''; position:absolute; inset:-4px; border-radius:50%; }
   .card:hover .mover, .card:focus-within .mover { opacity:1; pointer-events:auto; }
   .card .mover:hover, .card .mover:focus-visible { border-color:var(--gold); color:var(--gold); outline:none; }
@@ -283,7 +281,7 @@
 
   .bad-note { color:var(--blocked); font-size:.78rem; line-height:1.6; }
 
-  /* Overlays: agent detail + workflows */
+  /* Overlays: the agent viewer, the New agent form, the help, and every dialog */
   .card.agent-click { cursor:pointer; }
   .card.agent-click:hover { transform:translateY(-2px); border-color:var(--gold); }
   .overlay {

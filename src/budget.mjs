@@ -10,11 +10,11 @@
 // A cap of 0 means no cap.
 
 /** The day and month a usage figure belongs to, in local time. */
-export const dayKey = (now) => {
+const dayKey = (now) => {
   const d = new Date(now);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
-export const monthKey = (now) => dayKey(now).slice(0, 7);
+const monthKey = (now) => dayKey(now).slice(0, 7);
 
 /**
  * Usage with `add` counted in. A new day or month starts from zero for that measure.

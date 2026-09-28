@@ -24,7 +24,7 @@ import { entry } from './activity.mjs';
 /** Herdr types a brief into a terminal, so it must survive as a single line. */
 export const oneLine = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
 /** Untrusted text is DATA. Fence it so an agent reads it as the job, not as extra orders. */
-export const fenced = (s) => `<<<${oneLine(s).replaceAll('>>>', '> > >')}>>>`;
+const fenced = (s) => `<<<${oneLine(s).replaceAll('>>>', '> > >')}>>>`;
 
 const BUSY = new Set(['working', 'blocked']);
 const OPEN = new Set(['backlog', 'todo', 'in_progress', 'in_review', 'blocked']);

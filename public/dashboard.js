@@ -75,7 +75,7 @@ export function draw(el, s, arg) {
 
 const stat = (label, n, href) => `<a class="stat" href="${href}"><b>${n}</b><span>${esc(label)}</span></a>`;
 
-export const approvalLine = (a) => (a.kind === 'budget'
+const approvalLine = (a) => (a.kind === 'budget'
   ? `${employee(a.payload.employeeId)?.name ?? a.payload.employeeId} hit ${a.payload.used}/${a.payload.limit} (${a.payload.cap})`
   : `${employee(a.by)?.name ?? a.by} proposes ${a.payload.issues?.length ?? 0} issue(s)${a.payload.hires?.length ? ` and ${a.payload.hires.length} hire(s)` : ''}`);
 

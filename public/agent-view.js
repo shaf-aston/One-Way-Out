@@ -247,7 +247,7 @@ const markView = (ov) => {
   }
 };
 
-export function openSheet(paneId, label, cwd) {
+function openSheet(paneId, label, cwd) {
   closeSheet(true);
   openPane = paneId;
   rawText = 'Reading…';

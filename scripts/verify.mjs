@@ -8,7 +8,6 @@ import { buildModel, listAgents } from '../src/model.mjs';
 import { sharedFolders } from '../src/collisions.mjs';
 import { stateOf, boardOf, checkStates, lanes } from '../src/state.mjs';
 import { describe } from '../src/commands.mjs';
-import { slugify, isValidId } from '../src/ids.mjs';
 import { listProjects } from '../src/projects.mjs';
 import { labelPlan, generatedLabel } from '../src/labels.mjs';
 import { validateDest, moveArgs, startPlan, moveKept } from '../src/moves.mjs';

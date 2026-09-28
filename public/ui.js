@@ -150,9 +150,8 @@ export const options = (rows, selected) => rows.map(([v, label]) =>
   `<option value="${esc(v)}" ${String(v) === String(selected ?? '') ? 'selected' : ''}>${esc(label)}</option>`).join('');
 
 /**
- * A small menu at a point on screen. The one menu this app has: connecting agents and moving
- * them both open it, so there is a single set of keyboard, edge-flipping and dismissal rules
- * rather than one per feature.
+ * A small menu at a point on screen — the one the Move button opens. Kept here, with one set of
+ * keyboard, edge-flipping and dismissal rules, so any later menu gets the same behaviour.
  *
  * Choosing an item IS the confirmation — each label says what will happen in full words, so
  * nothing here opens a second dialog to ask again.

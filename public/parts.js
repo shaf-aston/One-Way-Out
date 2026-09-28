@@ -1,9 +1,8 @@
 // Pieces more than one page draws: an employee card, an issue row, the budget bars, and the
 // forms for issues, employees, goals and routines. One copy of each, so an issue looks and is
 // edited the same way from the Dashboard, the board, and a goal.
-import { esc, dialog, options, ask, ago, headMsg, basename } from './ui.js';
+import { esc, dialog, options, ask, headMsg } from './ui.js';
 import { theState, act, employee, keyOf, liveOf, activeStaff, issueById } from './store.js';
-import { go } from './router.js';
 
 export const statusLabel = (id) => theState()?.vocab.statuses.find((s) => s.id === id)?.label ?? id;
 
@@ -224,5 +223,3 @@ export async function planGoal(goalId = null) {
   return out;
 }
 
-export const folderName = (p) => basename(p);
-export { ago, go };

@@ -76,7 +76,7 @@ export function patchCompany(company, input) {
 }
 
 /** A budget: each cap is a whole number, 0 meaning "no cap". */
-export function cleanBudget(b) {
+function cleanBudget(b) {
   return {
     tasksPerDay: int(b?.tasksPerDay, 0, 1000, 0),
     activeMinPerDay: int(b?.activeMinPerDay, 0, 1440, 0),
@@ -147,7 +147,7 @@ export function validateGoal(input, goals = [], existing = null) {
 }
 
 /** How often a routine fires. Kept small on purpose: every N minutes, or a time each (week)day. */
-export function cleanSchedule(s) {
+function cleanSchedule(s) {
   const kind = ['every', 'daily', 'weekdays'].includes(s?.kind) ? s.kind : 'daily';
   if (kind === 'every') return { kind, everyMin: int(s?.everyMin, 5, 10080, 60) };
   const at = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(s?.at ?? '')) ? s.at : '09:00';

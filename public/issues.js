@@ -1,7 +1,7 @@
 // Issues — every piece of work. The board is one column per status; drag a card to move it.
 // `#/issues/<id>` is one issue: why it exists, who has it, what they wrote back, and the thread.
 import { esc, get, ask, dialog, headMsg, ago } from './ui.js';
-import { theState, act, cid, employee, keyOf, liveOf, issueById, activeStaff } from './store.js';
+import { act, cid, employee, keyOf, liveOf, issueById, activeStaff } from './store.js';
 import { issueCard, issueForm, statusLabel } from './parts.js';
 import { feedLine } from './dashboard.js';
 import { go } from './router.js';
