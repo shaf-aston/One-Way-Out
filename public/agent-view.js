@@ -5,9 +5,7 @@
 // the terminal's own colours into HTML); nothing here invents text.
 import { $, esc, get, post, autoGrow, attachPalette, clean, confirmOnce } from './ui.js';
 import { parseAnsi, toLog, toTerminal, readMode, MODES } from './reader.js';
-import { isWiring, finishFromKeyboard } from './connect.js';
 import { bindKey } from './keys.js';
-import { go } from './router.js';
 
 // How often the open screen re-reads, handed in so this module does not fetch config itself.
 let pollMs = 1500;
@@ -249,7 +247,7 @@ const markView = (ov) => {
   }
 };
 
-export function openSheet(paneId, label, cwd) {
+function openSheet(paneId, label, cwd) {
   closeSheet(true);
   openPane = paneId;
   rawText = 'Reading…';
@@ -482,11 +480,11 @@ export function openSheet(paneId, label, cwd) {
   box.focus();
 }
 
-// One opener for mouse and keyboard — a card is a button, so Enter and Space work too.
-// A card click means one of two things and never both: while a line is being drawn the click
-// finishes the line; otherwise it opens the agent.
+// One opener for mouse and keyboard — a card is a button, so Enter and Space work too. Anything
+// carrying data-pane opens that agent: a card on the Agents map, or an employee who is running.
+// A click on a control inside the card (its move button, a Pause, a link) is that control's.
 function openFromCard(e) {
-  if (isWiring() || e.target.closest('[data-port], [data-move], .kind-menu')) return;
+  if (e.target.closest('[data-move], .kind-menu, a, input, select, textarea, button:not(.open)')) return;
   const el = e.target.closest('[data-pane]');
   if (el && !e.target.closest('.overlay')) openSheet(el.dataset.pane, el.dataset.label, el.dataset.cwd);
 }
@@ -495,15 +493,7 @@ function openFromCard(e) {
 // apart. Which letter it is, and the words explaining it, are in keys.js.
 bindKey('full', () => document.querySelector('.agent-overlay [data-act="full"]')?.click());
 
-/** Start listening for card clicks. Called once by main.js, after the page exists. */
+/** Start listening for card clicks. Called once by app.js, after the page exists. */
 export function watchCards() {
   document.addEventListener('click', openFromCard);
-  // The name is a real button, so Enter and Space open the card by themselves. The one
-  // thing to add: while a line is being drawn, those keys finish the line instead.
-  document.addEventListener('keydown', (e) => {
-    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.card .open') && isWiring()) {
-      e.preventDefault();
-      finishFromKeyboard(e.target.closest('[data-pane]').dataset.pane);
-    }
-  });
 }

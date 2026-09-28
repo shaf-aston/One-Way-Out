@@ -7,19 +7,16 @@
   "openBrowser": true,
   "projectRoots": [],
   "defaultAgentCommand": "claude",
-  "workflow": {
-    "stepTimeoutMs": 900000,
-    "settleMs": 6000,
-    "spawnReadyMs": 30000,
-    "maxConcurrent": 3
-  },
-  "run": {
-    "maxAgents": 8,
-    "maxDepth": 3,
-    "plannerRetries": 1,
+  "companiesDir": "",
+  "heartbeat": {
+    "enabled": true,
+    "tickMs": 5000,
     "taskRetries": 1,
     "taskTimeoutMs": 1800000,
-    "runTimeoutMs": 10800000
+    "graceMs": 45000,
+    "maxWorking": 4,
+    "maxDelegatedIssues": 12,
+    "deliverWaitMs": 2000
   },
   "prompts": {
     "scanIntervalMs": 5000,

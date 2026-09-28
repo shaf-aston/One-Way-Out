@@ -15,11 +15,12 @@
 // that belongs with the thing it closes — listed so the help is complete, handled where the
 // element lives.
 
-// The four letters that reach a view are the map's own. While a panel or a dialog is open the
-// letters belong to it — otherwise pressing W over a half-filled New agent form would throw it
-// away. The agent viewer is deliberately not counted: it is a look, not a place.
-const onMap = () => !document.querySelector('.overlay:not(.agent-overlay)');
+// The letters that reach a page work whenever no panel or dialog is open. While one is, the
+// letters belong to it — otherwise pressing I over a half-filled form would throw it away. The
+// agent viewer is deliberately not counted: it is a look, not a place.
+const free = () => !document.querySelector('.overlay:not(.agent-overlay)');
 const reading = () => !!document.querySelector('.agent-overlay');
+const page = (key, id, name, does) => ({ id, key, where: 'Anywhere, when no panel is open', when: free, does: `Go to ${name}: ${does}` });
 
 /**
  * Every key, in the order the help reads them. `where` answers "when does this work?" and
@@ -29,32 +30,32 @@ const reading = () => !!document.querySelector('.agent-overlay');
 export const KEYS = [
   { id:'help', key:'?', where:'Anywhere',
     does:'Open this help. Press ? again, or Escape, to put it away.' },
-  { id:'new-agent', key:'N', where:'On the map', when:onMap,
-    does:'Start a new agent — you pick the folder it works in and give it a name.' },
-  { id:'hierarchy', key:'O', where:'On the map', when:onMap,
-    does:'Show the same agents stacked by who leads whom.' },
-  { id:'workflows', key:'W', where:'On the map', when:onMap,
-    does:'Open Workflows: one agent does a job, and when it finishes the next one starts.' },
-  { id:'run', key:'R', where:'On the map', when:onMap,
-    does:'Open New run: type one goal and a team of agents is built to do it.' },
+  page('D', 'go-dashboard', 'the Dashboard', 'what needs you, and how the company is doing.'),
+  page('I', 'go-issues', 'Issues', 'every piece of work, as a board you can drag between columns.'),
+  page('G', 'go-goals', 'Goals', 'what the company is aiming at, and how far each goal has got.'),
+  page('O', 'go-org', 'the Org chart', 'who works here, who reports to whom, and their budgets.'),
+  page('R', 'go-routines', 'Routines', 'work that repeats on a schedule.'),
+  page('B', 'go-inbox', 'the Inbox', 'plans, hires and budgets waiting for your yes or no.'),
+  page('L', 'go-activity', 'the Activity log', 'everything that happened, and who did it.'),
+  page('A', 'go-agents', 'Agents', 'the live map of every agent running in Herdr.'),
+  { id:'new-issue', key:'C', where:'Anywhere, when no panel is open', when:free,
+    does:'Create an issue — a title is enough; assign it and it starts at the next heartbeat.' },
+  { id:'new-agent', key:'N', where:'Anywhere, when no panel is open', when:free,
+    does:'Start a plain agent in a folder, outside any company.' },
   { id:'move', key:'M', where:'On an agent card, once you have moved to it with Tab',
     does:'Move that agent into another Herdr window or page. It keeps its whole conversation.' },
   { id:'full', key:'F', where:'While you are reading an agent', when:reading,
     does:'Give that agent the whole window. Press F again to shrink it back.' },
-  { key:'Enter or Space', where:'On an agent card',
+  { key:'Enter or Space', where:'On an agent card, or an employee who is running',
     does:'Open that agent and read what it is doing right now.' },
-  { key:'Enter or Space', where:'On the small dot at the edge of a card',
-    does:'Start a line from that agent. Move to another card and press Enter to join the two.' },
-  { key:'Enter or Space', where:'On a line already drawn between two agents',
-    does:'Say what that connection means, or take the line away.' },
   { key:'Enter', where:'In the box where you write back to an agent',
     does:'Send what you typed to that agent. Hold Shift and press Enter to start a new line instead.' },
   { key:'up and down arrows', where:'In that same box, cursor at the very start or the very end',
     does:'Bring back something you sent this agent earlier, so you can send it again.' },
-  { key:'/', where:'In the box where you write back to an agent, and in a workflow step',
+  { key:'/', where:'In the box where you write back to an agent',
     does:'List the commands and skills this machine already has. Arrows pick one, Tab or Enter puts it in.' },
   { key:'Escape', where:'Anywhere',
-    does:'Close whatever is on top — a panel, a small menu, or a line you had started drawing.' },
+    does:'Close whatever is on top — a dialog, a panel, or a small menu.' },
 ];
 
 /**

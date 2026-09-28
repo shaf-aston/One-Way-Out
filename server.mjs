@@ -7,39 +7,38 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { exec } from 'node:child_process';
-import { resolveHerdrBin, getSnapshot, readPane, runInPane, focusPane, closePane, startAgent, movePane, sendKeys, PANE_KEYS } from './src/herdr.mjs';
+import { resolveHerdrBin, getSnapshot, readPane, runInPane, focusPane, closePane, startAgent, movePane, sendKeys, reloadConfig, PANE_KEYS } from './src/herdr.mjs';
 import { validateDest, moveArgs, startPlan, moveKept, PLACES } from './src/moves.mjs';
-import { PRESETS, applyPreset, toSaved, fromSaved } from './src/org.mjs';
-import { startRunPlan, checkRun, approveRun } from './src/crew.mjs';
 import { buildModel, listAgents, checkAgreedCount } from './src/model.mjs';
 import { sharedFolders } from './src/collisions.mjs';
 import { checkStates, boardOf, lanes } from './src/state.mjs';
-import { buildBriefs, cleanWires, teamsFromWires, KINDS } from './src/team.mjs';
 import { listCommands } from './src/commands.mjs';
-import { validateFlow } from './src/flows.mjs';
-import { list, save, remove } from './src/store.mjs';
 import { isValidPaneId, isValidId } from './src/ids.mjs';
 import { listProjects } from './src/projects.mjs';
 import { compilePrompts, matchPrompt, panesToScan, groupWaiting } from './src/prompts.mjs';
 import { exactLabel } from './public/menu.js';
 import { answerMenu } from './src/answer.mjs';
 import { readImage, IMAGE_LIMITS } from './src/image.mjs';
-import { startRun, listRuns, stopRun } from './src/runner.mjs';
-import { reloadConfig } from './src/herdr.mjs';
 import { SETTINGS, readSettings, patchSettings } from './src/herdrsettings.mjs';
+import { validateCompany, patchCompany, validateEmployee, validateGoal, validateRoutine, exportBundle, importBundle, text, MODELS, EMPLOYEE_STATES } from './src/company.mjs';
+import { validateIssue, issueKey, STATUSES, PRIORITIES, lanesClash } from './src/issues.mjs';
+import { budgetBars, overBudget } from './src/budget.mjs';
+import { describeSchedule } from './src/schedule.mjs';
+import { applyApproval, DEFAULT_LIMITS } from './src/heartbeat.mjs';
+import { entry, filterActivity } from './src/activity.mjs';
+import { TEMPLATES } from './src/templates.mjs';
+import { listCompanies, loadState, saveState, withCompany, readActivity, appendActivity, readResult, workPaths, retireWork, deleteCompany } from './src/companies.mjs';
+import { createOffice, matchPanes, unhired } from './src/office.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
-const config = JSON.parse(await readFile(path.join(root, 'config.json'), 'utf8'));
+// A test run points this at a scratch copy, so it never touches your real companies or Herdr.
+const config = JSON.parse(await readFile(process.env.ONE_WAY_OUT_CONFIG || path.join(root, 'config.json'), 'utf8'));
 const herdrBin = resolveHerdrBin(config.herdrBin);
-const flowsDir = config.flowsDir || path.join(os.homedir(), '.claude', 'herdr', 'flows');
+const home = (...p) => path.join(os.homedir(), '.claude', 'herdr', ...p);
 // Where a pasted picture is kept so an agent can open it by path.
-const shotsDir = config.shotsDir || path.join(os.homedir(), '.claude', 'herdr', 'shots');
-// The lines you drew between agents — one record, its own folder so a workflow listing never
-// picks it up as a workflow.
-const wiresDir = config.wiresDir || path.join(os.homedir(), '.claude', 'herdr', 'wires');
-const WIRES_ID = 'connections';
-// One folder per run of the org builder: goal.md, plan.json, run.json — see src/crew.mjs.
-const runsDir = config.runsDir || path.join(os.homedir(), '.claude', 'herdr', 'runs');
+const shotsDir = config.shotsDir || home('shots');
+// One folder per company — see src/companies.mjs for what is inside.
+const companiesDir = config.companiesDir || home('companies');
 // How many agents may work in one folder before the map says so. They share one set of files,
 // so a second agent there can overwrite the first one's work; 1 means two is already worth
 // saying. The number itself lives in config.json — this is only where it is read.
@@ -58,23 +57,9 @@ if (stateProblems.length) {
   console.error('config.json states are unusable, the board will be empty:');
   for (const p of stateProblems) console.error('  -', p);
 }
-const limits = {
-  timeoutMs: config.workflow?.stepTimeoutMs ?? 900000,
-  settleMs: config.workflow?.settleMs ?? 6000,
-  spawnReadyMs: config.workflow?.spawnReadyMs ?? 30000,
-  pollMs: config.pollIntervalMs ?? 1500,
-  maxConcurrent: config.workflow?.maxConcurrent ?? 3,
-};
-// Caps for the run/plan/task org builder (src/crew.mjs, src/plan.mjs) — a distinct block from
-// the `limits` above, which belongs to the older saved-workflow runner.
-const runLimits = {
-  maxAgents: config.run?.maxAgents ?? 8,
-  maxDepth: config.run?.maxDepth ?? 3,
-  plannerRetries: config.run?.plannerRetries ?? 1,
-  taskRetries: config.run?.taskRetries ?? 1,
-  taskTimeoutMs: config.run?.taskTimeoutMs ?? 1800000,
-  runTimeoutMs: config.run?.runTimeoutMs ?? 10800000,
-};
+// The heartbeat's numbers — see src/heartbeat.mjs for what each one governs.
+const beat = { ...DEFAULT_LIMITS, deliverWaitMs: 2000, enabled: true, ...(config.heartbeat ?? {}) };
+const office = createOffice({ bin: herdrBin, root: companiesDir, limits: beat, agentCommand: config.defaultAgentCommand || 'claude' });
 
 // The questions this app can answer for every agent at once. They are written in
 // config.json — the wording, the answers offered, and how often to look are all config,
@@ -107,9 +92,6 @@ async function scanWaiting() {
   }));
   return { ok: true, entries: found.filter(Boolean) };
 }
-
-// Ready-made workflows shipped with the app, so the panel is never a blank page.
-const presets = JSON.parse(await readFile(path.join(root, 'presets', 'workflows.json'), 'utf8'));
 
 const MIME = {
   '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json',
@@ -148,6 +130,342 @@ async function jsonBody(req, limit) {
   try { return JSON.parse(raw); } catch { return null; }
 }
 
+/* ── Herdr's snapshot, shared ──
+   The map, every company page and the heartbeat all ask "what is running?" within the same
+   second. One answer is kept for a moment and handed to all of them, rather than each one
+   running the Herdr CLI again. */
+let snapCache = { at: 0, promise: null };
+function freshSnapshot(maxAgeMs = 700) {
+  if (!snapCache.promise || Date.now() - snapCache.at > maxAgeMs) {
+    snapCache = { at: Date.now(), promise: getSnapshot(herdrBin) };
+  }
+  return snapCache.promise;
+}
+
+/* ── Companies ──
+   A company is a folder (src/companies.mjs); what it may contain is checked in src/company.mjs
+   and src/issues.mjs; what happens next is decided in src/heartbeat.mjs. These handlers only
+   read the request, call those, and answer. After anything that could hand out work, the
+   heartbeat runs once straight away, so nothing waits for the next tick to start. */
+const soon = (cid) => { setTimeout(() => office.tick(cid).catch((e) => console.error('tick failed:', e)), 50); };
+
+async function companiesRoute(req, res, url, post) {
+  if (url.pathname === '/api/companies' && !post) {
+    return ok(res, { companies: await listCompanies(companiesDir), templates: TEMPLATES });
+  }
+  if (url.pathname === '/api/companies' && post) {
+    const body = await jsonBody(req);
+    const taken = (await listCompanies(companiesDir)).map((c) => c.id);
+    const made = validateCompany(body, taken);
+    if (!made.ok) return fail(res, made.error, 400);
+    const employees = [];
+    const tpl = TEMPLATES.find((t) => t.id === body?.template) ?? TEMPLATES[0];
+    for (const m of tpl.team) {
+      const v = validateEmployee(m, employees);
+      if (v.ok) employees.push(v.employee);
+    }
+    const now = Date.now();
+    const state = { company: { ...made.company, createdAt: now }, goals: [], employees, issues: [], routines: [], approvals: [] };
+    await saveState(companiesDir, state);
+    await appendActivity(companiesDir, state.company.id, [entry('you', 'founded', { type: 'company', id: state.company.id },
+      `${state.company.name} founded with ${employees.map((e) => e.name).join(', ') || 'nobody yet'}.`, now)]);
+    return ok(res, { company: state.company });
+  }
+  if (url.pathname === '/api/companies/import' && post) {
+    const body = await jsonBody(req, 4 * 1024 * 1024);
+    const taken = (await listCompanies(companiesDir)).map((c) => c.id);
+    const got = importBundle(body?.bundle, taken);
+    if (!got.ok) return fail(res, got.error, 400);
+    const ctx = { company: got.company, issues: [], employees: got.employees, goals: got.goals };
+    for (const raw of got.rawIssues) {
+      const v = validateIssue({ ...raw, parentId: null, blockedBy: [] }, ctx,
+        { id: isValidId(raw?.id) && !ctx.issues.some((i) => i.id === raw.id) ? raw.id : undefined, number: Number.isInteger(raw?.number) ? raw.number : undefined,
+          createdAt: Number(raw?.createdAt) || Date.now(), createdBy: text(raw?.createdBy, 49) || 'you', kind: raw?.kind === 'plan' ? 'plan' : 'work',
+          comments: (Array.isArray(raw?.comments) ? raw.comments : []).slice(-200).map((c) => ({ by: text(c?.by, 49), at: Number(c?.at) || 0, text: text(c?.text, 4000) })) });
+      if (v.ok) { ctx.issues.push(v.issue); ctx.company.nextIssue = Math.max(ctx.company.nextIssue, v.issue.number + 1); }
+    }
+    for (const raw of got.rawIssues) {
+      const i = ctx.issues.find((x) => x.id === raw?.id);
+      if (!i) continue;
+      if (ctx.issues.some((x) => x.id === raw.parentId && x.id !== i.id)) i.parentId = raw.parentId;
+      i.blockedBy = (Array.isArray(raw.blockedBy) ? raw.blockedBy : []).filter((b) => b !== i.id && ctx.issues.some((x) => x.id === b));
+    }
+    const state = { company: got.company, goals: got.goals, employees: got.employees, issues: ctx.issues, routines: got.routines, approvals: [] };
+    await saveState(companiesDir, state);
+    await appendActivity(companiesDir, state.company.id, [entry('you', 'imported', { type: 'company', id: state.company.id }, `${state.company.name} imported.`)]);
+    return ok(res, { company: state.company });
+  }
+  return fail(res, 'Not found', 404);
+}
+
+/** Everything the company pages draw, in one read — so a page polls one thing, not six. */
+async function companyView(cid) {
+  const state = await loadState(companiesDir, cid);
+  if (!state) return null;
+  const snap = await freshSnapshot();
+  const model = snap.ok ? buildModel(snap.snapshot) : null;
+  const { panes } = model ? matchPanes(model, state.employees) : { panes: {} };
+  const activity = filterActivity(await readActivity(companiesDir, cid), { limit: 80 });
+  const now = Date.now();
+  return {
+    ...state,
+    // What each budget bar shows, and the words for everything the pages offer — worked out
+    // here, once, so the page never keeps a second copy of a rule.
+    employees: state.employees.map((e) => ({ ...e, bars: budgetBars(e, now), over: overBudget(e, now)?.words ?? null })),
+    routines: state.routines.map((r) => ({ ...r, when: describeSchedule(r.schedule) })),
+    clashes: lanesClash(state.issues),
+    vocab: { statuses: STATUSES, priorities: PRIORITIES, models: MODELS, employeeStates: EMPLOYEE_STATES },
+    tickMs: beat.tickMs,
+    live: Object.fromEntries(Object.entries(panes).map(([id, p]) => [id, p ? { paneId: p.paneId, status: p.status } : null])),
+    herdr: snap.ok ? 'ok' : snap.error,
+    unhired: model ? unhired(model, state.employees) : [],
+    activity,
+  };
+}
+
+/** Run `change(state, body)` under the company lock; it returns {error} or {log?, wake?, after?, …result}. */
+async function mutate(res, cid, body, change) {
+  try {
+    const out = await withCompany(companiesDir, cid, async (state) => {
+      const r = (await change(state, body)) ?? {};
+      if (r.error) return { result: r };
+      return { state, log: r.log ?? [], result: r };
+    });
+    const { error, wake, after, log, ...data } = out ?? {};
+    if (error) return fail(res, error, 400);
+    if (wake) soon(cid);
+    if (after) await after();
+    return ok(res, data);
+  } catch (e) {
+    return fail(res, e.message || e, 404);
+  }
+}
+
+/** Replace the record with the same id in `list`, or add it. */
+const upsert = (list, rec) => {
+  const i = list.findIndex((x) => x.id === rec.id);
+  if (i < 0) list.push(rec); else list[i] = rec;
+};
+
+async function companyRoute(req, res, cid, action, url, post) {
+  if (!isValidId(cid)) return fail(res, 'Bad company id', 400);
+  const now = Date.now();
+
+  if (!post) {
+    if (action === 'state') {
+      const view = await companyView(cid);
+      return view ? ok(res, view) : fail(res, 'That company does not exist.', 404);
+    }
+    if (action === 'issue') {
+      const state = await loadState(companiesDir, cid);
+      const issue = state?.issues.find((i) => i.id === url.searchParams.get('id'));
+      if (!issue) return fail(res, 'That issue does not exist.', 404);
+      return ok(res, {
+        issue,
+        result: await readResult(companiesDir, cid, issue.id),
+        activity: filterActivity(await readActivity(companiesDir, cid), { type: 'issue', id: issue.id, limit: 50 }),
+      });
+    }
+    if (action === 'activity') {
+      const q = url.searchParams;
+      return ok(res, { activity: filterActivity(await readActivity(companiesDir, cid),
+        { actor: q.get('actor') || undefined, type: q.get('type') || undefined, q: q.get('q') || undefined, limit: 500 }) });
+    }
+    if (action === 'export') {
+      const state = await loadState(companiesDir, cid);
+      if (!state) return fail(res, 'That company does not exist.', 404);
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename="${cid}.company.json"`, 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify(exportBundle(state), null, 2));
+    }
+    return fail(res, 'Not found', 404);
+  }
+
+  const body = await jsonBody(req, 512 * 1024);
+  if (!body) return fail(res, 'Bad request body', 400);
+
+  switch (action) {
+    // ── The company itself ──
+    case 'company': return mutate(res, cid, body, (s) => {
+      const was = s.company.running;
+      s.company = patchCompany(s.company, body);
+      if (was === s.company.running) return { log: [entry('you', 'edited', { type: 'company', id: cid }, 'Company settings changed.', now)] };
+      return { wake: s.company.running, log: [entry('you', s.company.running ? 'started' : 'paused', { type: 'company', id: cid },
+        s.company.running ? 'The company is running: employees pick up work on their heartbeat.' : 'The company is paused: nobody is given new work.', now)] };
+    });
+    case 'delete':
+      if (body.confirm !== cid) return fail(res, 'Type the company id to confirm.', 400);
+      await deleteCompany(companiesDir, cid);
+      return ok(res);
+
+    // ── Goals ──
+    case 'goals': return mutate(res, cid, body, (s) => {
+      const existing = s.goals.find((g) => g.id === body.id) ?? null;
+      const v = validateGoal(body, s.goals, existing);
+      if (!v.ok) return { error: v.error };
+      upsert(s.goals, v.goal);
+      return { goal: v.goal, log: [entry('you', existing ? 'edited' : 'created', { type: 'goal', id: v.goal.id }, `Goal: ${v.goal.title}`, now)] };
+    });
+    case 'goals/delete': return mutate(res, cid, body, (s) => {
+      const g = s.goals.find((x) => x.id === body.id);
+      if (!g) return { error: 'That goal does not exist.' };
+      s.goals = s.goals.filter((x) => x.id !== g.id).map((x) => (x.parentId === g.id ? { ...x, parentId: g.parentId } : x));
+      for (const i of s.issues) if (i.goalId === g.id) i.goalId = null;
+      return { log: [entry('you', 'deleted', { type: 'goal', id: g.id }, `Goal: ${g.title}`, now)] };
+    });
+
+    // ── Issues ──
+    case 'issues': return mutate(res, cid, body, async (s) => {
+      const existing = s.issues.find((i) => i.id === body.id) ?? null;
+      // "In progress" is not something a person sets — it is an agent checking the issue out.
+      // Asking for it means "start this now": it goes to To do and its assignee is woken.
+      const start = body.status === 'in_progress' && existing?.status !== 'in_progress';
+      const reopen = existing && ['in_review', 'done', 'blocked', 'cancelled'].includes(existing.status) && ['todo', 'backlog'].includes(body.status ?? (start ? 'todo' : ''));
+      const input = { ...body, status: start ? 'todo' : body.status };
+      const v = validateIssue(input, s, existing, now);
+      if (!v.ok) return { error: v.error };
+      if (reopen || start) v.issue.work = null;
+      if (reopen) await retireWork(workPaths(companiesDir, cid).result(v.issue.id));
+      upsert(s.issues, v.issue);
+      s.company.nextIssue = Math.max(s.company.nextIssue ?? 1, v.nextIssue);
+      const who = s.employees.find((e) => e.id === v.issue.assignee);
+      if (start && who) who.live = { ...who.live, wake: true };
+      const key = issueKey(s.company, v.issue);
+      const what = !existing ? `${key} created: ${v.issue.title}`
+        : existing.status !== v.issue.status ? `${key} moved to ${v.issue.status.replace('_', ' ')}`
+          : existing.assignee !== v.issue.assignee ? `${key} assigned to ${who?.name ?? 'nobody'}` : `${key} edited`;
+      return { issue: v.issue, wake: true, log: [entry('you', existing ? 'updated' : 'created', { type: 'issue', id: v.issue.id }, what, now)] };
+    });
+    case 'issues/delete': return mutate(res, cid, body, (s) => {
+      const i = s.issues.find((x) => x.id === body.id);
+      if (!i) return { error: 'That issue does not exist.' };
+      if (i.status === 'in_progress') return { error: 'Someone is working on it. Cancel it first, or wait.' };
+      s.issues = s.issues.filter((x) => x.id !== i.id);
+      for (const o of s.issues) {
+        o.blockedBy = (o.blockedBy ?? []).filter((b) => b !== i.id);
+        if (o.parentId === i.id) o.parentId = i.parentId ?? null;
+      }
+      return { log: [entry('you', 'deleted', { type: 'issue', id: i.id }, `${issueKey(s.company, i)} deleted: ${i.title}`, now)] };
+    });
+    case 'issues/comment': return mutate(res, cid, body, (s) => {
+      const i = s.issues.find((x) => x.id === body.id);
+      const words = text(body.text, 4000);
+      if (!i) return { error: 'That issue does not exist.' };
+      if (!words) return { error: 'Type something first.' };
+      i.comments.push({ by: 'you', at: now, text: words });
+      i.updatedAt = now;
+      const key = issueKey(s.company, i);
+      // A note on an issue someone is working on right now reaches them straight away.
+      const e = s.employees.find((x) => x.id === i.assignee);
+      const tell = i.status === 'in_progress' && e;
+      return {
+        told: !!tell,
+        after: tell ? async () => {
+          const view = await companyView(cid);
+          office.tell(cid, e.id, `A note from the board on ${key}: <<<${words.replaceAll('>>>', '> > >')}>>>`, view?.live ?? {}).catch(() => {});
+        } : null,
+        log: [entry('you', 'commented', { type: 'issue', id: i.id }, `On ${key}: ${words.slice(0, 160)}`, now)],
+      };
+    });
+
+    // ── Employees ──
+    case 'employees': return mutate(res, cid, body, async (s) => {
+      const existing = s.employees.find((e) => e.id === body.id) ?? null;
+      const v = validateEmployee(body, s.employees, existing);
+      if (!v.ok) return { error: v.error };
+      // Hiring an agent that is already running: it keeps its conversation and just joins.
+      if (!existing && isValidPaneId(body.bindPane)) {
+        const snap = await freshSnapshot(0);
+        const a = snap.ok ? listAgents(buildModel(snap.snapshot)).find((x) => x.id === body.bindPane) : null;
+        if (!a) return { error: 'That agent is no longer running.' };
+        v.employee.paneId = a.id;
+        v.employee.session = a.session ?? null;
+      }
+      upsert(s.employees, v.employee);
+      return { employee: v.employee, wake: true, log: [entry('you', existing ? 'edited' : 'hired', { type: 'employee', id: v.employee.id },
+        existing ? `${v.employee.name}'s role changed.` : `${v.employee.name} hired as ${v.employee.title}.`, now)] };
+    });
+    case 'employees/pause':
+    case 'employees/resume':
+    case 'employees/wake':
+    case 'employees/terminate': return mutate(res, cid, body, async (s) => {
+      const e = s.employees.find((x) => x.id === body.id);
+      if (!e) return { error: 'That employee does not exist.' };
+      const verb = action.split('/')[1];
+      if (verb === 'pause') e.state = 'paused';
+      if (verb === 'resume') { e.state = 'active'; e.live = { ...e.live, wake: true }; }
+      if (verb === 'wake') {
+        if (e.state !== 'active') return { error: `${e.name} is ${e.state} — resume them first.` };
+        e.live = { ...e.live, wake: true };
+      }
+      if (verb === 'terminate') {
+        const view = await companyView(cid);
+        const pane = view?.live?.[e.id]?.paneId;
+        if (pane) await office.close(pane).catch(() => {});
+        e.state = 'terminated';
+        e.paneId = null;
+        for (const i of s.issues.filter((x) => x.assignee === e.id && !['done', 'cancelled'].includes(x.status))) {
+          i.assignee = null; i.status = 'backlog'; i.work = null;
+        }
+        for (const r of s.employees.filter((x) => x.reportsTo === e.id)) r.reportsTo = e.reportsTo;
+      }
+      const words = { pause: 'paused — no new work', resume: 'resumed', wake: 'woken to check their queue now', terminate: 'let go; their agent was closed and their open issues went back to the backlog' };
+      const past = { pause: 'paused', resume: 'resumed', wake: 'woke', terminate: 'terminated' };
+      return { wake: verb !== 'pause', log: [entry('you', past[verb], { type: 'employee', id: e.id }, `${e.name} ${words[verb]}.`, now)] };
+    });
+
+    // ── Routines ──
+    case 'routines': return mutate(res, cid, body, (s) => {
+      const existing = s.routines.find((r) => r.id === body.id) ?? null;
+      const v = validateRoutine(body, s, existing);
+      if (!v.ok) return { error: v.error };
+      if (v.routine.enabled && !existing?.enabled) v.routine.enabledAt = now;
+      else v.routine.enabledAt = existing?.enabledAt ?? now;
+      upsert(s.routines, v.routine);
+      return { routine: v.routine, log: [entry('you', existing ? 'edited' : 'created', { type: 'routine', id: v.routine.id }, `Routine: ${v.routine.title}`, now)] };
+    });
+    case 'routines/delete': return mutate(res, cid, body, (s) => {
+      const r = s.routines.find((x) => x.id === body.id);
+      if (!r) return { error: 'That routine does not exist.' };
+      s.routines = s.routines.filter((x) => x.id !== r.id);
+      return { log: [entry('you', 'deleted', { type: 'routine', id: r.id }, `Routine: ${r.title}`, now)] };
+    });
+
+    // ── Governance ──
+    case 'approvals/decide': return mutate(res, cid, body, (s) => {
+      const d = applyApproval(s, String(body.id ?? ''), body.decision === 'approve' ? 'approve' : 'reject', { now, note: body.note, raiseTo: body.raiseTo });
+      if (!d.ok) return { error: d.error };
+      Object.assign(s, d.state);
+      return {
+        wake: true,
+        after: d.effects.length ? async () => {
+          const view = await companyView(cid);
+          for (const f of d.effects) office.tell(cid, f.employeeId, f.text, view?.live ?? {}).catch(() => {});
+        } : null,
+        log: d.log,
+      };
+    });
+
+    // "Plan this goal": the top of the company gets an issue whose whole job is to split the goal
+    // into issues for the team. What it writes comes back as a plan in the Inbox.
+    case 'plan': return mutate(res, cid, body, (s) => {
+      const goal = s.goals.find((g) => g.id === body.goalId) ?? null;
+      const what = goal ? goal.title : text(body.text, 2000);
+      if (!what) return { error: 'Say what should be planned.' };
+      const top = s.employees.find((e) => !e.reportsTo && e.state === 'active');
+      if (!top) return { error: 'Nobody is active at the top of the company to plan it. Hire or resume a CEO first.' };
+      const v = validateIssue({ title: `Plan: ${what}`.slice(0, 200), body: goal?.detail || (goal ? '' : what), assignee: top.id, goalId: goal?.id ?? null,
+        priority: 'high', kind: 'plan', status: 'todo' }, s, null, now);
+      if (!v.ok) return { error: v.error };
+      s.issues.push(v.issue);
+      s.company.nextIssue = v.nextIssue;
+      top.live = { ...top.live, wake: true };
+      return { issue: v.issue, wake: true, log: [entry('you', 'asked for a plan', { type: 'issue', id: v.issue.id },
+        `${top.name} will plan "${what}" as ${issueKey(s.company, v.issue)}.`, now)] };
+    });
+    default: return fail(res, 'Not found', 404);
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const post = req.method === 'POST';
@@ -161,7 +479,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname === '/api/snapshot') {
-    const snap = await getSnapshot(herdrBin);
+    const snap = await freshSnapshot();
     if (!snap.ok) return fail(res, snap.error);
     const model = buildModel(snap.snapshot);
     const cols = boardOf(model, states);
@@ -394,163 +712,9 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // The three meanings a line between agents can have — the words live in src/team.mjs.
-  if (url.pathname === '/api/kinds' && !post) {
-    return ok(res, { kinds: KINDS });
-  }
-
-  // ── The lines you drew, kept ──
-  // Written against each agent's conversation id, not its pane id, so a line survives both a
-  // move and a restart of this app. A line whose agent is gone is simply not returned.
-  if (url.pathname === '/api/wires') {
-    const snap = await getSnapshot(herdrBin);
-    const agents = snap.ok ? listAgents(buildModel(snap.snapshot)) : [];
-    // The number of groups goes back with the lines. The browser used to work it out again from
-    // its own copy of the rule and the two did not agree — measured 2026-09-02, "side by side"
-    // then "colleagues" over three agents was two jobs to the server and one group on screen.
-    // Grouping belongs to src/team.mjs, so it is counted there and only there.
-    if (!post) {
-      const saved = (await list(wiresDir)).find((r) => r.id === WIRES_ID)?.wires ?? [];
-      const wires = cleanWires(fromSaved(saved, agents));
-      return ok(res, { wires, groups: teamsFromWires(wires).length });
-    }
-    const drawn = cleanWires((await jsonBody(req, 256 * 1024))?.wires);
-    await save(wiresDir, { id: WIRES_ID, name: 'connections', wires: toSaved(drawn, agents) });
-    return ok(res, { saved: drawn.length, groups: teamsFromWires(drawn).length });
-  }
-
-  // ── Ready-made shapes for the chain of command ──
-  if (url.pathname === '/api/org/presets' && !post) {
-    return ok(res, { presets: PRESETS });
-  }
-
-  // Apply one shape to the agents running now: {id, agentIds?}. It replaces every line and is
-  // saved in the same breath, so one click is the whole action — and every line it made can
-  // then be changed or removed by hand like any other.
-  if (url.pathname === '/api/org/preset' && post) {
-    const body = await jsonBody(req);
-    const snap = await getSnapshot(herdrBin);
-    if (!snap.ok) return fail(res, snap.error);
-    const agents = listAgents(buildModel(snap.snapshot));
-    const known = new Set(agents.map((a) => a.id));
-    const ids = Array.isArray(body?.agentIds) && body.agentIds.length
-      ? body.agentIds.filter((id) => known.has(id))
-      : agents.map((a) => a.id);
-    const drawn = cleanWires(applyPreset(String(body?.id ?? ''), ids));
-    await save(wiresDir, { id: WIRES_ID, name: 'connections', wires: toSaved(drawn, agents) });
-    return ok(res, { wires: drawn, agents: ids.length });
-  }
-
-  // ── A run: one goal, split by a planner agent into a plan you approve before anything else starts ──
-  // POST body: {goal, folder}. Starts a planner in `folder` and returns the new run's id.
-  if (url.pathname === '/api/run/plan' && post) {
-    const body = await jsonBody(req);
-    const goal = String(body?.goal ?? '').trim().slice(0, 2000);
-    const folder = String(body?.folder ?? '').trim();
-    if (!goal) return fail(res, 'Type the goal first.', 400);
-    if (!folder || !path.isAbsolute(folder)) return fail(res, 'Pick a folder first.', 400);
-    try {
-      const id = await startRunPlan(herdrBin, runsDir, { goal, folder });
-      return ok(res, { id });
-    } catch (e) {
-      console.error('run plan failed:', e);
-      return fail(res, 'Herdr could not start the planner. Check the folder still exists.');
-    }
-  }
-
-  // Where a run's plan stands: GET /api/run/status?id=run-xxxx
-  if (url.pathname === '/api/run/status' && !post) {
-    const id = url.searchParams.get('id') ?? '';
-    const checked = await checkRun(herdrBin, runsDir, id, runLimits);
-    if (!checked.ok) return fail(res, checked.error, 404);
-    return ok(res, { run: checked.run });
-  }
-
-  // Start the org this run's plan describes: {id, plan}. `plan` came back from an editable
-  // screen, so it is re-checked here before a single agent is spawned.
-  if (url.pathname === '/api/run/approve' && post) {
-    const body = await jsonBody(req, 512 * 1024);
-    const checked = await approveRun(herdrBin, runsDir, { id: String(body?.id ?? ''), plan: body?.plan }, runLimits);
-    if (!checked.ok) return fail(res, checked.error);
-    return ok(res, { run: checked.run });
-  }
-
-  // Pick a run back up after this server restarted: {id}. There is no in-memory run state to
-  // lose — checkRun already rebuilds everything from run.json plus which result files exist on
-  // every call — so this is that same recompute, run once on request rather than waited for on
-  // the next poll. A task whose pane went idle without writing while nothing was watching gets
-  // its usual retry-then-escalate right here, and report.md is written once every top task lands.
-  if (url.pathname === '/api/run/resume' && post) {
-    const body = await jsonBody(req);
-    const checked = await checkRun(herdrBin, runsDir, String(body?.id ?? ''), runLimits);
-    if (!checked.ok) return fail(res, checked.error, 404);
-    return ok(res, { run: checked.run });
-  }
-
-  // ── The lines drawn on the map: give every joined-up group the same job, each its own part ──
-  if (url.pathname === '/api/connections/dispatch' && post) {
-    const body = await jsonBody(req, 512 * 1024);
-    const task = String(body?.task ?? '').trim();
-    if (!task) return fail(res, 'Type the job for these agents.', 400);
-
-    const groups = teamsFromWires(cleanWires(body?.wires));
-    if (!groups.length) return fail(res, 'Draw a line between two agents first — that is what says who works with whom.');
-
-    const snap = await getSnapshot(herdrBin);
-    if (!snap.ok) return fail(res, snap.error);
-    const byId = new Map(listAgents(buildModel(snap.snapshot)).map((a) => [a.id, a]));
-
-    const briefs = groups.flatMap((g) => buildBriefs({
-      bin: herdrBin,
-      kind: g.kind,
-      leader: g.leaderId ? byId.get(g.leaderId) : null,
-      members: g.memberIds.map((id) => byId.get(id)).filter(Boolean),
-      task,
-    }));
-    const gone = groups.flatMap((g) => [g.leaderId, ...g.memberIds]).filter((id) => id && !byId.has(id));
-    if (!briefs.length) return fail(res, 'None of the connected agents are still running.');
-
-    const results = await Promise.all(briefs.map((b) =>
-      runInPane(herdrBin, b.paneId, b.text).then(() => true, (e) => { console.error('connection dispatch failed:', e); return false; })));
-    const sent = results.filter(Boolean).length;
-    if (!sent) return fail(res, 'Herdr would not take the message. Open an agent and check it is at a prompt.');
-    return ok(res, { sent, failed: briefs.length - sent, gone: [...new Set(gone)].length });
-  }
-
-  // ── Workflows: saved chains of agent steps, plus the ready-made ones ──
-  if (url.pathname === '/api/flows' && !post) {
-    return ok(res, { flows: await list(flowsDir), presets });
-  }
-
-  if (url.pathname === '/api/flows/save' && post) {
-    const check = validateFlow(await jsonBody(req));
-    if (!check.ok) return fail(res, check.error);
-    try { return ok(res, { flow: await save(flowsDir, check.flow) }); }
-    catch (e) { console.error('flow save failed:', e); return fail(res, 'Could not save that workflow.'); }
-  }
-
-  if (url.pathname === '/api/flows/delete' && post) {
-    const body = await jsonBody(req);
-    if (!isValidId(body?.id)) return fail(res, 'Bad workflow id', 400);
-    try { await remove(flowsDir, body.id); return ok(res); }
-    catch (e) { console.error('flow delete failed:', e); return fail(res, 'Could not delete that workflow.'); }
-  }
-
-  if (url.pathname === '/api/flows/run' && post) {
-    const check = validateFlow(await jsonBody(req));
-    if (!check.ok) return fail(res, check.error);
-    try { return ok(res, { run: startRun(herdrBin, check.flow, limits) }); }
-    catch (e) { return fail(res, e.message || e); }
-  }
-
-  if (url.pathname === '/api/flows/runs' && !post) {
-    return ok(res, { runs: listRuns() });
-  }
-
-  if (url.pathname === '/api/flows/stop' && post) {
-    const body = await jsonBody(req);
-    return ok(res, { stopped: stopRun(String(body?.id ?? '')) });
-  }
+  const co = url.pathname.match(/^\/api\/c\/([a-z0-9-]+)\/([a-z/-]+)$/);
+  if (co) return companyRoute(req, res, co[1], co[2], url, post);
+  if (url.pathname.startsWith('/api/companies')) return companiesRoute(req, res, url, post);
 
   // Static files from /public (index.html by default).
   const rel = url.pathname === '/' ? '/index.html' : url.pathname;
@@ -583,6 +747,7 @@ server.on('error', (e) => {
 server.listen(config.port, '127.0.0.1', () => {
   console.log(`One-Way-Out running at ${target}`);
   console.log(`Using Herdr at: ${herdrBin}`);
-  console.log(`Workflows saved in: ${flowsDir}`);
+  console.log(`Companies kept in: ${companiesDir}`);
+  if (beat.enabled) office.start(beat.tickMs);
   openBrowser();
 });

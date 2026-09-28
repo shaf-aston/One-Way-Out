@@ -9,7 +9,6 @@
 // So: folder -> space label (and therefore the bold line), chat name -> the faint line below it.
 // Every space is numbered, even a pane still sitting at a shell prompt - skipping one would let
 // the next pane opened in that folder land on a name already taken.
-import path from 'node:path';
 
 /** Longest label the sidebar shows before Herdr's own ellipsis makes names ambiguous. */
 const WIDE = 34;
@@ -60,7 +59,8 @@ const uniq = () => {
  *   tabs lists tab ids whose label must be cleared to ''.
  */
 export function labelPlan(agents) {
-  const folderOf = (a) => path.basename(a.cwd || '') || '(no folder)';
+  // Split on either slash: a Windows path read on any machine still names its folder.
+  const folderOf = (a) => String(a.cwd || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '(no folder)';
   const spaceName = uniq();
   const agentName = uniq();
   const spaces = [];

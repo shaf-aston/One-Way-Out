@@ -1,6 +1,6 @@
-// Pure: the lines between agents, read as a chain of command. No DOM, no I/O — the same
-// module the page draws from and the checks run against, so there is one answer to "who is
-// above whom" rather than two that can drift apart.
+// Pure: reporting lines read as a chain of command — the rows of the Org chart. No DOM, no I/O —
+// the same module the page draws from and the checks run against, so there is one answer to
+// "who is above whom" rather than two that can drift apart.
 
 /** Only some kinds put one agent above another. A line between equals never makes a tier. */
 export const RANKS = new Set(['manages', 'handoff']);

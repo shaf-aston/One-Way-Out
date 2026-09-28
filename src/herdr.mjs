@@ -60,7 +60,7 @@ export async function getSnapshot(bin) {
  * Read a pane's screen text — unwrapped so lines flow to the viewer's full width; falls back
  * to the wrapped visible screen.
  * @param {'text'|'ansi'} format - `ansi` keeps the agent's own colours and bold, which is
- *   what the reader view renders from. Plain `text` is what the workflow runner matches on.
+ *   what the reader view renders from. Plain `text` is what the heartbeat and the prompt scan read.
  */
 export async function readPane(bin, target, format = 'text') {
   for (const source of ['recent-unwrapped', 'visible']) {
@@ -127,13 +127,6 @@ export async function movePane(bin, args) {
 /** Close a pane — this is how an agent is shut down; Herdr has no separate "kill agent". */
 export async function closePane(bin, paneId) {
   result(await run(bin, ['pane', 'close', paneId]), 'Herdr could not close that pane');
-}
-
-/** Live state of one agent: {agent_status, cwd, pane_id, ...}. */
-export async function getAgent(bin, target) {
-  const {agent} = result(await run(bin, ['agent', 'get', target]), 'Herdr could not read that agent');
-  if (!agent) throw new Error('Herdr returned an unexpected agent shape');
-  return agent;
 }
 
 /**

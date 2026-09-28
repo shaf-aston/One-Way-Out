@@ -3,9 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "A live visual map and control panel for AI coding agents running in Herdr.",
+  "description": "Run a company of AI coding agents in Herdr: goals, issues, an org chart, heartbeats, budgets and approvals — from one page.",
   "scripts": {
     "start": "node server.mjs",
-    "verify": "node scripts/verify.mjs"
+    "verify": "node scripts/verify.mjs",
+    "e2e": "node scripts/e2e.mjs"
   }
 }
