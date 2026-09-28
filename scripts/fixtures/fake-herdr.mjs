@@ -10,7 +10,7 @@
 //
 // State lives in $FAKE_HERDR_DIR/state.json. Every text typed into a pane is appended to
 // $FAKE_HERDR_DIR/sent.log, so a test can check exactly what an agent would have been told.
-import { readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync, rmdirSync, renameSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
@@ -21,7 +21,22 @@ const WORK_MS = Number(process.env.FAKE_HERDR_WORK_MS || 2500);
 
 const blank = () => ({ n: 0, workspaces: [], tabs: [], panes: [] });
 const load = () => { try { return JSON.parse(readFileSync(file, 'utf8')); } catch { return blank(); } };
-const save = (s) => writeFileSync(file, JSON.stringify(s, null, 2));
+const save = (s) => { writeFileSync(`${file}.tmp`, JSON.stringify(s, null, 2)); renameSync(`${file}.tmp`, file); };
+
+// The app runs several of these at once (a heartbeat snapshot while an agent is being started).
+// Each one reads, changes and writes the whole file, so without a lock one can write back a state
+// from before another's change — an agent started a moment ago simply vanishes. One at a time.
+const lock = path.join(dir, 'lock');
+const nap = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+for (let tries = 0; ; tries += 1) {
+  try { mkdirSync(lock); break; } catch {
+    // A lock left by a crashed call is cleared after two seconds rather than waited on forever.
+    try { if (Date.now() - statSync(lock).mtimeMs > 2000) rmdirSync(lock); } catch {}
+    if (tries > 400) break;
+    nap(10);
+  }
+}
+process.on('exit', () => { try { rmdirSync(lock); } catch {} });
 const out = (result) => { process.stdout.write(JSON.stringify({ result })); };
 const fail = (message) => { process.stdout.write(JSON.stringify({ error: { message } })); };
 
