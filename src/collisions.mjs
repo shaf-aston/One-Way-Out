@@ -10,11 +10,15 @@ import { listAgents } from './model.mjs';
  * so grouping on the raw string would miss the very thing being looked for. This key only ever
  * groups; the path handed back is the one Herdr actually said.
  */
+const isWin = (dir) => /^[a-z]:[\\/]/i.test(dir);
+// A Windows path is read with Windows rules on any machine, so the checks run the same anywhere.
+const rules = (dir) => (isWin(dir) ? path.win32 : path);
+
 function folderKey(dir) {
-  const norm = path.normalize(dir).replace(/(.)[\\/]+$/, '$1');
+  const norm = rules(dir).normalize(dir).replace(/(.)[\\/]+$/, '$1');
   // Case is folded only for a Windows-shaped path. Elsewhere two folders differing in case
   // really are two folders, and merging them would invent a clash that is not there.
-  return /^[a-z]:[\\/]/i.test(norm) ? norm.toLowerCase() : norm;
+  return isWin(norm) ? norm.toLowerCase() : norm;
 }
 
 /**
@@ -36,7 +40,7 @@ export function sharedFolders(model, maxPerFolder = 1) {
     if (!dir) continue;
     const key = folderKey(dir);
     let group = byFolder.get(key);
-    if (!group) byFolder.set(key, group = { folder: path.basename(dir) || dir, path: dir, agents: [] });
+    if (!group) byFolder.set(key, group = { folder: rules(dir).basename(dir) || dir, path: dir, agents: [] });
     group.agents.push({ id: a.id, label: a.label, workspace: a.workspace });
   }
 
